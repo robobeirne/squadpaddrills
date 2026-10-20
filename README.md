@@ -24,6 +24,10 @@ control tests, 84 C++ assertions and 354 C++/Python comparisons. The
 [portable workflow](.github/workflows/portable-playback.yml) runs the same checks
 on pull requests and pushes to `main`. See [CI scope](Docs/CI.md) for details.
 
+The workflow also exercises the native build launcher and SSH coordinator on
+Python 3.12 and 3.10 using offline test fixtures. These launcher tests run no
+Unreal process and make no worker connection.
+
 A passing check establishes playback logic and reference agreement. Native
 compilation, rendered animation, foot-to-ball contact and device performance
 have separate acceptance gates.
@@ -74,8 +78,13 @@ three.js viewer remain separate source projects.
 
 ## Next implementation gate
 
-Compile the runtime and native reader tests in a suitable Unreal environment.
-Restore the reviewed asset inputs, import and reopen them, then build the
+Run the [native build and reader gate](Docs/NATIVE_EXECUTION.md) in a suitable
+Unreal environment. Its first test uses only public source and the compiled
+fixture. The source increment includes a bounded native launcher, SSH
+coordinator and dormant manual workflow. The [remote compute proposal](Docs/REMOTE_BUILD_COSTS.md)
+prices one attempt; no worker has been provisioned or paid execution authorized.
+
+After that gate passes, restore the reviewed asset inputs, import and reopen them, then build the
 saved runtime probe. Inspect real animation poses and playback controls before
 cooking a build. Prove iPhone playback and the Swift host before converting
 the wider drill library.

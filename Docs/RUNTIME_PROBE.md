@@ -3,6 +3,11 @@
 Status: source implemented in the cloud. Unreal compilation, editor execution,
 packaging, Swift hosting and iPhone measurements remain unrun.
 
+Begin with the [native build and reader gate](NATIVE_EXECUTION.md). That narrow
+first gate needs only the public source and compiled fixture. The asset-backed
+probe procedure below follows a successful build and restoration of the
+separate input bundle.
+
 This increment connects the portable playback design to an Unreal runtime
 module and prepares an independent saved probe. Python creates the data asset
 and map in the editor. The packaged scene uses C++ for playback. No Python

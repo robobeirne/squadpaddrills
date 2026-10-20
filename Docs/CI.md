@@ -31,6 +31,23 @@ The workflow writes its execution receipt to the runner's temporary directory,
 then includes it in the job summary. It does not overwrite the historical checked-in
 reports, upload an artifact or commit generated results.
 
+## Native launcher tests
+
+The same Python 3.12 job additionally runs:
+
+```sh
+python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate -v
+```
+
+A separate five-minute job repeats only these launcher tests using Python 3.10,
+the proposed Ubuntu 22.04 worker's interpreter family. The cases exercise report
+rejection, process timeouts and child cleanup, source identity, fixed SSH
+arguments, bounded output, receipt validation and failure evidence preservation.
+The subprocess cases use ordinary local Python programs. Controlled test
+fixtures stand in for the engine files, reports and transport. No actual Unreal
+process or SSH connection runs in either job, and these tests produce no native
+acceptance receipt.
+
 ## Evidence this workflow cannot provide
 
 A green portable check does **not** mean the Unreal project was compiled or run.
@@ -66,6 +83,13 @@ the standard `ubuntu-24.04` runner, a ten-minute job limit and cancellation of o
 runs on the same branch or pull request. The token has read-only `contents`
 permission, checkout does not persist credentials, and LFS downloading is disabled.
 There are no secrets, paid/custom runners, package publications or deployment steps.
+
+This description applies to `portable-playback.yml`. The separate
+[`native-build.yml`](../.github/workflows/native-build.yml) is a dormant,
+manual-only SSH coordinator for an operator-prepared worker. It does not run
+on a pull request or register a self-hosted runner. Its prerequisites,
+credential handling, private evidence collection and execution limits are
+documented in [Native execution](NATIVE_EXECUTION.md).
 
 Actions are pinned to full commit hashes. The following version tags and commit
 objects were verified against their official GitHub repositories on 2026-10-20:
