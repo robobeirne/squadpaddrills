@@ -1,0 +1,56 @@
+{
+  "schema": "squadpad.unreal.import.v1",
+  "project_name": "SquadPad3D",
+  "target_engine": "5.8",
+  "export_receipt_path": "SourceData/athlete_a/export_manifest.json",
+  "mesh": {
+    "id": "athlete_a",
+    "fbx": "SourceData/athlete_a/athlete_a.fbx",
+    "name": "SK_AthleteA"
+  },
+  "animations": [
+    {
+      "id": "idle",
+      "fbx": "SourceData/athlete_a/idle.fbx",
+      "name": "A_Idle",
+      "duration_seconds": 4.1,
+      "contact_seconds": null,
+      "source_kind": "canonical_bake",
+      "root_motion_baked_into_skeleton": false,
+      "root_motion": {"mode": "actor_track", "path": "SourceData/athlete_a/idle.root.json"}
+    },
+    {
+      "id": "pass",
+      "fbx": "SourceData/athlete_a/pass.fbx",
+      "name": "A_Pass",
+      "duration_seconds": 3.3925,
+      "contact_seconds": 1.39262125,
+      "contact_phase": 0.4105,
+      "source_limb": "RightFoot",
+      "source_kind": "canonical_bake",
+      "root_motion_baked_into_skeleton": false,
+      "root_motion": {"mode": "actor_track", "path": "SourceData/athlete_a/pass.root.json"}
+    },
+    {
+      "id": "receive",
+      "fbx": "SourceData/athlete_a/receive.fbx",
+      "name": "A_Receive",
+      "duration_seconds": 1.3,
+      "contact_seconds": 0.57187,
+      "contact_phase": 0.4399,
+      "source_limb": "RightFoot",
+      "source_kind": "canonical_bake",
+      "root_motion_baked_into_skeleton": false,
+      "root_motion": {"mode": "actor_track", "path": "SourceData/athlete_a/receive.root.json"}
+    }
+  ],
+  "fixture_path": "Fixtures/first_pass.drill.json",
+  "evidence": {
+    "metadata_source": "Recovered direct inspection of the existing canonical mocap index on 2026-10-19.",
+    "contact_timings": "Candidate timings from the existing bake, not calibrated boot-surface contacts.",
+    "assets_included": false,
+    "unreal_execution_verified": false,
+    "visual_quality_accepted": false,
+    "native_integration_verified": false
+  }
+}

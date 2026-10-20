@@ -1,0 +1,42 @@
+# Unreal and local build outputs
+/Binaries/
+/DerivedDataCache/
+/Intermediate/
+/Saved/
+.vs/
+.idea/
+__pycache__/
+*.py[cod]
+*.log
+.DS_Store
+.venv/
+
+# Original or generated assets are restored separately for the initial public slice.
+/SourceInputs/
+/DerivedInputs/
+/SourceData/
+/Fixtures/first_pass.drill.json
+/Fixtures/rondo-4v1.level-1.observed.json
+/Content/SquadPad/Bootstrap/
+/Content/SquadPad/RuntimeProbe/
+/Preview/
+/Reports/
+/Evidence/
+/Docs/History/
+/PACKAGE_MANIFEST.json
+
+# Large source binaries and local archives require deliberate publication review.
+*.fbx
+*.glb
+*.bin
+*.blend
+*.blend1
+*.zip
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.mobileprovision
