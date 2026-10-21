@@ -1,0 +1,111 @@
+{
+  "schema": "squadpad.engine-archive.v1",
+  "observed_at_utc": "2026-10-21T08:21:42.528262+00:00",
+  "status": "archive_metadata_inspected_native_execution_pending",
+  "source_kind": "user_supplied_archive",
+  "filename": "Linux_Unreal_Engine_5.8.4.zip",
+  "user_reported_release_date": "2026-10-20",
+  "user_reported_release_date_independently_verified": false,
+  "compressed_archive_bytes": 39819212076,
+  "zip_entry_count": 299959,
+  "listed_expanded_bytes": 76967950798,
+  "expanded_bytes_basis": "sum_of_uncompressed_sizes_in_zip_central_directory_not_allocated_disk_usage",
+  "archive_root_prefix": "",
+  "build_version": {
+    "MajorVersion": 5,
+    "MinorVersion": 8,
+    "PatchVersion": 4,
+    "Changelist": 58902052,
+    "CompatibleChangelist": 55116800,
+    "IsLicenseeVersion": 0,
+    "IsPromotedBuild": 1,
+    "BranchName": "++UE5+Release-5.8"
+  },
+  "build_version_sha256": "80a6af0f427f373b43a1c373082acf2b3de07305d215a67c27f18272e6dff24f",
+  "observed_engine_entries": {
+    "Engine/Build/InstalledBuild.txt": {
+      "present": true,
+      "uncompressed_bytes": 6
+    },
+    "Engine/Binaries/Linux/UnrealEditor": {
+      "present": true,
+      "uncompressed_bytes": 451272
+    },
+    "Engine/Binaries/Linux/UnrealEditor-Cmd": {
+      "present": true,
+      "uncompressed_bytes": 451280
+    },
+    "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.dll": {
+      "present": true,
+      "uncompressed_bytes": 3203584
+    },
+    "Engine/Build/BatchFiles/Linux/Build.sh": {
+      "present": true,
+      "uncompressed_bytes": 1314
+    },
+    "Engine/Build/BatchFiles/Linux/SetupToolchain.sh": {
+      "present": false,
+      "uncompressed_bytes": null
+    }
+  },
+  "installed_build_marker": {
+    "value": "UE_5.8",
+    "sha256": "2510df0682bbf178ebe0ab81da5f36b2d2bfdc19d8cd562466de649669e70393"
+  },
+  "toolchain": {
+    "sdk_manifest_path": "Engine/Config/Linux/Linux_SDK.json",
+    "sdk_manifest": {
+      "MainVersion": "v26_clang-20.1.8-rockylinux8",
+      "MinVersion": "v26_clang-20.1.8-rockylinux8",
+      "MaxVersion": "v26_clang-20.1.8-rockylinux8",
+      "AutoSDKPlatform": "Linux_x64"
+    },
+    "sdk_manifest_sha256": "2aae9f3a9f092886f5426a5482ce2ceec812061a63de49be76fb6cbfa7f26e0d",
+    "bundled_native_compiler_entry": "Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v26_clang-20.1.8-rockylinux8/x86_64-unknown-linux-gnu/bin/clang",
+    "compiler_entry_present": true,
+    "compiler_executed": false,
+    "expected_clang_version": "20.1.8",
+    "ubt_toolchain_selection_verified": false,
+    "setup_toolchain_script_present": false
+  },
+  "native_installation": {
+    "engine_root": "/opt/unreal/UE_5.8",
+    "root_must_resolve_to_this_exact_path": true,
+    "project_engine_association": "5.8",
+    "patch_accepted_by_existing_family_check": true,
+    "require_installed_build_version_hash_to_match": true,
+    "require_installed_sdk_manifest_hash_to_match": true
+  },
+  "inspection": {
+    "method": "bounded_https_byte_ranges_and_zip_metadata_parsing",
+    "range_requests": 22,
+    "bytes_read": 94436802,
+    "combined_limit_bytes": 100663296,
+    "matching_entity_tag_required_within_each_inspection": true,
+    "engine_binaries_extracted": false,
+    "engine_binaries_executed": false,
+    "full_archive_downloaded": false,
+    "full_archive_sha256": null,
+    "full_archive_integrity_verified": false,
+    "publisher_authenticity_verified": false,
+    "signed_download_url_included": false
+  },
+  "execution": {
+    "worker_provisioned": false,
+    "native_build_run": false,
+    "native_reader_test_run": false,
+    "visual_acceptance_established": false
+  },
+  "remaining_before_execution": [
+    "Arrange provider access and configure the independent cleanup controller.",
+    "Establish an unexpired private full-file transfer route before provisioning.",
+    "Download the complete archive on the prepared worker, verify exact length, and record its full SHA-256.",
+    "Extract the actual engine root at /opt/unreal/UE_5.8 and compare Build.version and Linux_SDK.json hashes with this record.",
+    "Run the bundled compiler version check and inspect the native preflight receipt before --run.",
+    "Verify the UBT log selects the expected bundled v26 compiler when the actual build runs."
+  ],
+  "sources": {
+    "linux_requirements": "https://dev.epicgames.com/documentation/en-us/unreal-engine/linux-development-requirements-for-unreal-engine",
+    "linux_quickstart": "https://dev.epicgames.com/documentation/en-us/unreal-engine/linux-development-quickstart-for-unreal-engine"
+  }
+}

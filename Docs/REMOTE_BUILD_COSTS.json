@@ -1,12 +1,12 @@
 {
   "researched_on": "2026-10-20",
-  "status": "budget_approved_access_and_live_cleanup_pending",
+  "status": "budget_approved_archive_metadata_inspected_provider_and_live_cleanup_pending",
   "paid_compute_authorized": true,
   "resources_provisioned": false,
   "mac_access_paused": true,
   "scope": {
-    "engine": "Unreal Engine 5.8 Linux x86-64 installed build",
-    "exact_archive_access_verified": false,
+    "engine": "Unreal Engine 5.8.4 Linux x86-64 installed build",
+    "exact_archive_access_verified": true,
     "archive_bytes_verified": false,
     "source_engine_build_included": false,
     "target": "SquadPad3DEditor Linux Development",
@@ -14,7 +14,12 @@
     "gpu_required_for_initial_gate": false,
     "visual_acceptance_included": false,
     "iphone_acceptance_included": false,
-    "private_asset_bundle_required_for_initial_gate": false
+    "private_asset_bundle_required_for_initial_gate": false,
+    "archive_access_verification_scope": "bounded metadata range reads of the user-supplied archive; full transfer remains unverified",
+    "archive_metadata_record": "Docs/ENGINE_ARCHIVE.json",
+    "archive_size_bytes": 39819212076,
+    "archive_listed_expanded_bytes": 76967950798,
+    "bundled_native_sdk": "v26_clang-20.1.8-rockylinux8"
   },
   "budget_assumptions": {
     "authorization_granted": true,
@@ -222,6 +227,9 @@
     },
     "github_manual_dispatch": {
       "url": "https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow"
+    },
+    "epic_linux_requirements": {
+      "url": "https://dev.epicgames.com/documentation/en-us/unreal-engine/linux-development-requirements-for-unreal-engine"
     }
   },
   "approval_recorded_on": "2026-10-21",
@@ -235,7 +243,10 @@
     "watchdog_armed": false,
     "native_execution_occurred": false,
     "resources_created_by_this_work": 0,
-    "provider_charges_incurred_by_this_work_usd": "0.00"
+    "provider_charges_incurred_by_this_work_usd": "0.00",
+    "supplied_archive_metadata_access_verified": true,
+    "full_archive_transfer_verified": false,
+    "epic_browser_session_verified": false
   },
   "independent_deletion": {
     "implementation": "Tools/Cloud/droplet_watchdog.py",

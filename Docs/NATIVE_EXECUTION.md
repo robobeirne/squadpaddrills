@@ -2,10 +2,14 @@
 
 Status on 21 October 2026: launchers, an independent deletion watchdog and offline
 tests are implemented. The user approved up to US$5 including tax for one native
-build attempt. Provider access, the exact engine archive and live watchdog
-configuration remain outstanding. No Unreal build, native automation test,
-worker connection or paid provisioning has occurred. The project still has no
-verified native binary or visual result.
+build attempt. Bounded metadata reads of the user-supplied
+`Linux_Unreal_Engine_5.8.4.zip` succeeded; the observed package identity, sizes and
+toolchain manifest are recorded in [ENGINE_ARCHIVE.json](ENGINE_ARCHIVE.json).
+The complete archive transfer, full-file checksum, integrity and publisher
+authenticity remain unverified. Provider access and live watchdog configuration
+are still outstanding. No Unreal build, native automation test, worker connection
+or paid provisioning has occurred. The project still has no verified native
+binary or visual result.
 
 This is the first part of SP2. It compiles `SquadPad3DEditor` and executes
 `SquadPad.Runtime.PlaybackReader.Contract` using a real installed Unreal engine.
@@ -16,15 +20,18 @@ It does not need the private athlete models, capture pack or imported content.
 
 Use the cloud workspace as the SSH controller and one temporary Ubuntu 22.04
 x86-64 worker. The [compute plan](REMOTE_BUILD_COSTS.md) identifies the machine
-and approved budget. Provider and Epic access, the exact installed engine archive
-and live independent deletion still need to be arranged before launch.
-The user's Mac remains outside this execution path.
+and approved budget. Before launch, establish provider access, a usable private
+route for transferring the complete inspected archive to the worker, and live
+independent deletion. Successful metadata access does not establish that the
+full transfer or build session can complete. The user's Mac remains outside
+this execution path.
 
-The engine must be the official Unreal 5.8 Linux installed build at
-`/opt/unreal/UE_5.8`, with Epic's C++ toolchain installed. Verify the archive
-version, checksum and disk footprint before provisioning. Epic documents the
-[precompiled Linux installation and C++ toolchain](https://dev.epicgames.com/documentation/en-us/unreal-engine/linux-development-quickstart-for-unreal-engine).
-This budget does not include compiling Unreal itself from source.
+Install the inspected Unreal 5.8.4 Linux package at the actual directory
+`/opt/unreal/UE_5.8`. That path must resolve to itself: the remote coordinator
+rejects a symlink that resolves to a differently named installation directory.
+The project's engine association remains `5.8`; the existing family check
+accepts patch version `5.8.4`. This budget does not include compiling Unreal
+itself from source.
 
 The worker needs Python 3.10 or newer, Git, OpenSSH, outbound HTTPS access to the
 public repository, an accurate clock, and an unprivileged build account with
@@ -39,6 +46,71 @@ must already be running and visibly armed before provisioning. Confirm it binds
 the new provider ID and creation time immediately afterward. Native and SSH
 timeouts do not delete the VM. Collect the evidence before the deletion deadline,
 including failure evidence if the build fails.
+
+## Inspected archive and worker installation
+
+The [sanitized archive receipt](ENGINE_ARCHIVE.json) records bounded HTTPS range
+reads and ZIP metadata inspection. It contains no download URL or credentials.
+
+| Observed property | Value |
+| --- | --- |
+| Filename | `Linux_Unreal_Engine_5.8.4.zip` |
+| Complete ZIP length | 39,819,212,076 bytes, approximately 37.08 GiB |
+| Listed expanded content | 76,967,950,798 bytes, approximately 71.68 GiB |
+| ZIP entries | 299,959 |
+| Engine version | `5.8.4` |
+| Changelist / compatible changelist | `58902052` / `55116800` |
+| Branch | `++UE5+Release-5.8` |
+| SDK MainVersion, MinVersion and MaxVersion | `v26_clang-20.1.8-rockylinux8` |
+| AutoSDK platform | `Linux_x64` |
+
+The ZIP contains the installed-build marker, `UnrealEditor`, `UnrealEditor-Cmd`,
+`UnrealBuildTool.dll` and the Linux `Build.sh` wrapper. It also lists the bundled
+native compiler shown below. Presence in the archive does not establish that
+these binaries execute successfully on the worker. The expanded byte count is
+the sum of ZIP member sizes; allocated disk space, filesystem overhead, build
+outputs and caches can require more.
+
+Compare the installed metadata with these already observed raw-file hashes:
+
+- Raw `Engine/Build/Build.version` SHA-256:
+  `80a6af0f427f373b43a1c373082acf2b3de07305d215a67c27f18272e6dff24f`.
+- Raw `Engine/Config/Linux/Linux_SDK.json` SHA-256:
+  `2aae9f3a9f092886f5426a5482ce2ceec812061a63de49be76fb6cbfa7f26e0d`.
+
+Use this installation sequence after the access and independent-deletion
+prerequisites are satisfied:
+
+1. Transfer the complete archive privately onto the prepared worker. Verify its
+   exact length and compute and record its full SHA-256 before extraction or
+   execution. The full-file checksum is currently unavailable; it is obtained
+   on the worker after transfer, not required before provisioning. A locally
+   computed checksum records identity but does not by itself authenticate the
+   publisher.
+2. Extract into the real `/opt/unreal/UE_5.8` directory so that
+   `Engine/Build/Build.version` is directly beneath it. Give the unprivileged
+   build account the required access. Compare the extracted `Build.version`
+   and `Linux_SDK.json` hashes with the values above and the archive receipt.
+3. Check the bundled compiler's actual version before native execution:
+
+   ```sh
+   SQUADPAD_ENGINE_ROOT=/opt/unreal/UE_5.8
+   SQUADPAD_CLANG="$SQUADPAD_ENGINE_ROOT/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v26_clang-20.1.8-rockylinux8/x86_64-unknown-linux-gnu/bin/clang"
+   "$SQUADPAD_CLANG" --version
+   ```
+
+4. Inspect the native preflight receipt, then run the build and reader gate.
+   Confirm in the real UBT log that it selects the expected bundled v26 compiler.
+   Compiler startup, UBT selection and a successful native build are separate
+   checks; none has been executed during archive inspection.
+
+`Engine/Build/BatchFiles/Linux/SetupToolchain.sh` is absent from this archive;
+there is no such setup command to run for this package. Its manifest and bundled
+SDK identify clang 20.1.8 / v26, matching Epic's current
+[UE 5.7–5.8 requirements table](https://dev.epicgames.com/documentation/en-us/unreal-engine/linux-development-requirements-for-unreal-engine).
+The Linux quickstart's clang 18.1.0 / `SetupToolchain.sh` instructions do not
+describe this inspected 5.8.4 package. Verify the bundled toolchain on the worker
+and retain any failure evidence instead of substituting that older toolchain.
 
 ## Execute on an already prepared worker
 
@@ -72,7 +144,7 @@ scheduling. The driver does not claim or configure a fixed compiler-action cap.
 The Editor invocation uses the documented
 [`Automation RunTest ...;Quit` and `ReportExportPath`](https://dev.epicgames.com/documentation/en-us/unreal-engine/run-automation-tests-in-unreal-engine)
 arguments with unattended mode and NullRHI. The first installed-engine run must
-still establish actual UE 5.8 command, report and API compatibility.
+still establish actual UE 5.8.4 command, report and API compatibility.
 
 ## Execute from the cloud controller
 
