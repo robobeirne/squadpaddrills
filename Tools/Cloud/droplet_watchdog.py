@@ -5,6 +5,7 @@ Python 3.10+, stdlib only. Default is local preflight: no token access or API.
 Use --watch on an already-running controller OUTSIDE the VM; observe its armed
 receipt before creating the uniquely named machine. This never creates a VM.
 
+The first attempt uses regular Basic 4 vCPU / 8 GiB RAM / 160 GiB disk in LON1.
 The operator must supply a live-verified size slug and Ubuntu 22.04 image ID.
 Keep a token with droplet:read and droplet:delete only in SQUADPAD_DO_TOKEN.
 Scopes are an operator prerequisite, not something this program can prove.
@@ -44,8 +45,8 @@ VERIFY_AGE = 18_000
 HTTP_TIMEOUT = 15
 MAX_BODY_BYTES = 2_000_000
 NAME_PATTERN = r"squadpad-native-[a-z0-9][a-z0-9-]{6,38}[a-z0-9]"
-EXPECTED = {"region": "lon1", "vcpus": 4, "memory": 32768, "disk": 600,
-            "hourly_usd_ceiling": "0.39", "backups_enabled": False}
+EXPECTED = {"region": "lon1", "vcpus": 4, "memory": 8192, "disk": 160,
+            "hourly_usd_ceiling": "0.072", "backups_enabled": False}
 
 
 class GuardError(Exception):

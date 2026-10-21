@@ -1,6 +1,6 @@
 {
   "researched_on": "2026-10-20",
-  "status": "budget_approved_archive_metadata_inspected_provider_and_live_cleanup_pending",
+  "status": "smaller_first_cpu_attempt_selected_live_access_and_cleanup_pending",
   "paid_compute_authorized": true,
   "resources_provisioned": false,
   "mac_access_paused": true,
@@ -19,7 +19,10 @@
     "archive_metadata_record": "Docs/ENGINE_ARCHIVE.json",
     "archive_size_bytes": 39819212076,
     "archive_listed_expanded_bytes": 76967950798,
-    "bundled_native_sdk": "v26_clang-20.1.8-rockylinux8"
+    "bundled_native_sdk": "v26_clang-20.1.8-rockylinux8",
+    "project_module_count": 1,
+    "authored_cpp_file_count": 7,
+    "general_8_gib_development_sufficiency_claimed": false
   },
   "budget_assumptions": {
     "authorization_granted": true,
@@ -33,24 +36,68 @@
     "external_deletion_verification_required": true,
     "published_rate_includes_tax": false,
     "illustrative_tax_rate_not_verified": "0.25",
-    "five_hour_cost_with_illustrative_tax": "2.43675",
+    "five_hour_cost_with_illustrative_tax": "0.4464375",
     "currency_conversion_included": false,
     "promotional_credits_assumed": false,
     "paid_snapshot_or_volume_retention": false,
     "egress_overage_assumed": false,
     "build_success_guaranteed": false,
-    "parallel_compile_policy": "UBT installed configuration and automatic CPU/memory scheduling; no fixed action cap configured",
+    "parallel_compile_policy": "Request project MaxParallelActions=1 with UBA, local UBA, XGE, FASTBuild and SN-DBS disabled; record requested XML/hash, not verified scheduling or peak memory",
     "authorization_currency": "USD",
     "authorization_including_tax": "5.00",
     "authorization_granted_on": "2026-10-21",
-    "remaining_in_authorization_after_illustrative_tax": "2.56325",
+    "remaining_in_authorization_after_illustrative_tax": "4.5535625",
     "independent_deletion_source_implemented": true,
-    "watchdog_observed_hourly_usd_ceiling": "0.39"
+    "watchdog_observed_hourly_usd_ceiling": "0.072",
+    "native_build_timeout_seconds": 1800,
+    "native_test_timeout_seconds": 600
   },
   "options": [
     {
-      "id": "do_storage_optimized_regular_4_32_600",
+      "id": "do_basic_regular_4_8_160",
       "preferred": true,
+      "provider": "DigitalOcean",
+      "plan": "Basic, Regular",
+      "architecture": "x86-64",
+      "vcpu": 4,
+      "cpu_allocation": "shared",
+      "ram": {
+        "quantity": 8,
+        "unit": "GiB"
+      },
+      "disk": {
+        "quantity": 160,
+        "unit": "GiB",
+        "type": "SSD"
+      },
+      "proposed_region": "LON1",
+      "connection": "direct SSH",
+      "register_as_github_self_hosted_runner": false,
+      "account_eligibility_verified": false,
+      "account_capacity_verified": false,
+      "memory_sufficiency_verified": false,
+      "currency": "USD",
+      "hourly_bundle": "0.07143",
+      "hourly_additional_ipv4": "0",
+      "hourly_total": "0.07143",
+      "four_hour_total": "0.28572",
+      "five_hour_total": "0.35715",
+      "monthly_bundle_cap": "48.00",
+      "billing_precision": "per_second",
+      "minimum_bill": "60 seconds or USD 0.01, whichever is greater",
+      "powered_off_still_billed": true,
+      "billing_stops_on": "destroy_vm",
+      "source_ids": [
+        "do_cpu_prices",
+        "do_cpu_availability",
+        "do_billing",
+        "do_cpu_plan_types",
+        "do_resource_limits"
+      ]
+    },
+    {
+      "id": "do_storage_optimized_regular_4_32_600",
+      "preferred": false,
       "provider": "DigitalOcean",
       "plan": "Storage-Optimized, Regular",
       "architecture": "x86-64",
@@ -84,8 +131,12 @@
         "do_cpu_prices",
         "do_cpu_availability",
         "do_billing",
-        "do_cpu_plan_types"
-      ]
+        "do_cpu_plan_types",
+        "do_resource_limits"
+      ],
+      "automatic_substitution_allowed": false,
+      "selection": "fallback_requires_higher_eligibility_or_provider_exception_under_published_limits",
+      "account_eligibility_verified": false
     },
     {
       "id": "hetzner_ccx33_eu",
@@ -127,7 +178,9 @@
         "hetzner_ccx_specs",
         "hetzner_ipv4",
         "hetzner_billing"
-      ]
+      ],
+      "automatic_substitution_allowed": false,
+      "selection": "separate_fallback_requires_capacity_and_working_space_review"
     }
   ],
   "gpu_follow_on": {
@@ -230,6 +283,12 @@
     },
     "epic_linux_requirements": {
       "url": "https://dev.epicgames.com/documentation/en-us/unreal-engine/linux-development-requirements-for-unreal-engine"
+    },
+    "do_resource_limits": {
+      "url": "https://docs.digitalocean.com/platform/resource-limits/"
+    },
+    "epic_build_configuration": {
+      "url": "https://dev.epicgames.com/documentation/en-us/unreal-engine/build-configuration-for-unreal-engine"
     }
   },
   "approval_recorded_on": "2026-10-21",
@@ -246,7 +305,8 @@
     "provider_charges_incurred_by_this_work_usd": "0.00",
     "supplied_archive_metadata_access_verified": true,
     "full_archive_transfer_verified": false,
-    "epic_browser_session_verified": false
+    "epic_browser_session_verified": false,
+    "provider_resource_eligibility_verified": false
   },
   "independent_deletion": {
     "implementation": "Tools/Cloud/droplet_watchdog.py",
@@ -266,5 +326,53 @@
     "must_observe_live_armed_before_creation": true,
     "verification": "fresh_exact_id_get_404_before_provider_age_5_hours",
     "provider_hard_dollar_cap": false
+  },
+  "first_attempt_plan_checked_on": "2026-10-21",
+  "public_resource_policy": {
+    "source_id": "do_resource_limits",
+    "published_tier_2_basic_monthly_price_ceiling_usd": "56.00",
+    "published_tier_2_some_dedicated_monthly_price_ceiling_usd": "84.00",
+    "selected_basic_plan_fits_published_basic_price_ceiling": true,
+    "authenticated_account_eligibility_verified": false
+  },
+  "worker_preparation": {
+    "proposed_fixed_swap_gib": 16,
+    "swap_location_policy": "included root disk only; no additional volume",
+    "swap_configured_or_verified": false,
+    "zip_plus_listed_expanded_gib_rounded": "108.77",
+    "nominal_remaining_gib_with_swap_before_os_and_overhead": "35.23",
+    "actual_available_disk_and_memory_measurement_required": true,
+    "actual_peak_resources_verified": false,
+    "full_archive_size_sha256_and_integrity_checks_required_on_worker": true,
+    "temporary_zip_policy": "remove only the worker downloaded ZIP after successful full integrity/extraction and metadata hash checks, before building",
+    "retain_archive_hash_record_and_original_supplied_archive": true,
+    "stop_conditions": [
+      "insufficient_storage",
+      "insufficient_memory",
+      "persistent_swap_pressure",
+      "broad_engine_rebuild",
+      "unrecoverable_failure",
+      "workload_deadline"
+    ]
+  },
+  "requested_build_configuration": {
+    "project_relative_path": "Saved/UnrealBuildTool/BuildConfiguration.xml",
+    "settings": {
+      "MaxParallelActions": 1,
+      "bAllowUBAExecutor": false,
+      "bAllowUBALocalExecutor": false,
+      "bAllowXGE": false,
+      "bAllowFASTBuild": false,
+      "bAllowSNDBS": false
+    },
+    "preflight_mutates_configuration": false,
+    "conflicting_existing_project_configuration_refused": true,
+    "requested_configuration_and_sha256_recorded": true,
+    "actual_runtime_scheduling_verified": false,
+    "peak_memory_verified": false,
+    "process_memory_limit_enforced": false,
+    "source_ids": [
+      "epic_build_configuration"
+    ]
   }
 }

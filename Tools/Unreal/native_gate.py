@@ -9,6 +9,7 @@ The command and report contract follows Epic's current documentation:
 https://dev.epicgames.com/documentation/en-us/unreal-engine/run-automation-tests-in-unreal-engine
 https://dev.epicgames.com/documentation/en-us/unreal-engine/review-test-results-in-unreal-engine
 https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-engine-command-line-arguments-reference
+https://dev.epicgames.com/documentation/en-us/unreal-engine/build-configuration-for-unreal-engine
 Native command/API compatibility still needs an actual installed-engine run.
 """
 from __future__ import annotations
@@ -33,6 +34,19 @@ ROOT = Path(__file__).resolve().parents[2]
 TARGET = "SquadPad3DEditor"
 TEST = "SquadPad.Runtime.PlaybackReader.Contract"
 SCHEMA = "squadpad.native-gate.v1"
+BUILD_CONFIGURATION_RELATIVE = Path("Saved/UnrealBuildTool/BuildConfiguration.xml")
+BUILD_CONFIGURATION_XML = b'''<?xml version="1.0" encoding="utf-8"?>
+<Configuration xmlns="https://www.unrealengine.com/BuildConfiguration">
+  <BuildConfiguration>
+    <MaxParallelActions>1</MaxParallelActions>
+    <bAllowUBAExecutor>false</bAllowUBAExecutor>
+    <bAllowUBALocalExecutor>false</bAllowUBALocalExecutor>
+    <bAllowXGE>false</bAllowXGE>
+    <bAllowFASTBuild>false</bAllowFASTBuild>
+    <bAllowSNDBS>false</bAllowSNDBS>
+  </BuildConfiguration>
+</Configuration>
+'''
 REQUIRED_INPUTS = (
     "Source/SquadPad3DEditor.Target.cs",
     "Source/SquadPadRuntime/SquadPadRuntime.Build.cs",
@@ -92,6 +106,61 @@ def file_record(path):
     path = Path(path)
     require(path.is_file() and path.stat().st_size > 0, f"Required file is missing or empty: {path}")
     return {"path": str(path.resolve()), "size_bytes": path.stat().st_size, "sha256": digest(path)}
+
+
+def build_configuration_plan(project):
+    return {"path": str(project.parent / BUILD_CONFIGURATION_RELATIVE),
+            "expected_sha256": hashlib.sha256(BUILD_CONFIGURATION_XML).hexdigest(),
+            "requested_policy": {"max_parallel_actions": 1, "executor": "local_parallel",
+                                 "disabled_executors": ["UBA", "UBALocal", "XGE", "FASTBuild", "SNDBS"]},
+            "status": "not_checked", "configured": False, "file": None,
+            "runtime_policy_verified": False,
+            "verification_limit": "A matching project XML is configuration evidence only. Inspect the actual UBT log for executor selection and action scheduling; no memory bound is established."}
+
+
+def build_configuration_path(project):
+    path = project.parent
+    for component in BUILD_CONFIGURATION_RELATIVE.parts:
+        path = path / component
+        require(not path.is_symlink(), "Project build configuration path contains a symlink")
+    require(path.resolve().is_relative_to(project.parent), "Project build configuration escapes the project")
+    return path
+
+
+def prepare_build_configuration(project, record, create=False):
+    """Observe in preflight; create only the exact project-local XML for a run."""
+    path = build_configuration_path(project)
+    if path.exists():
+        record["status"] = "conflict"
+        require(path.is_file() and path.stat().st_size == len(BUILD_CONFIGURATION_XML)
+                and path.read_bytes() == BUILD_CONFIGURATION_XML,
+                "Existing project build configuration conflicts with the controlled single-action policy; refusing to overwrite it")
+        record["status"] = "reused_exact" if create else "observed_exact"
+    elif create:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Recheck after directory creation, and never overwrite a concurrent file.
+        path = build_configuration_path(project)
+        with path.open("xb") as output:
+            output.write(BUILD_CONFIGURATION_XML)
+        record["status"] = "created"
+    else:
+        record["status"] = "absent_would_create_on_run"
+        return
+    record["file"] = file_record(path)
+    require(record["file"]["sha256"] == record["expected_sha256"],
+            "Project build configuration changed while it was being prepared")
+    record["configured"] = True
+
+
+def verify_build_configuration(project, record):
+    path = build_configuration_path(project)
+    if record["configured"]:
+        require(path.is_file(), "Project build configuration disappeared during the gate")
+        record["sha256_after"] = digest(path)
+        require(record["sha256_after"] == record["expected_sha256"],
+                "Project build configuration changed during the gate")
+    elif record["status"] == "absent_would_create_on_run":
+        require(not path.exists(), "Project build configuration appeared during preflight")
 
 
 def source_snapshot(project):
@@ -378,7 +447,8 @@ def execute_gate(args):
                            "skeletal_pose_evaluated": False, "contact_geometry_measured": False,
                            "visual_quality_accepted": False, "ios_executed": False},
               "scope": "Installed Editor target build and native playback JSON-reader contract only"}
-    report["build_parallelism"] = "Not overridden by gate; UBT applies installed configuration and core/memory scheduling. No fixed action cap is claimed."
+    report["build_parallelism"] = "Project-local XML requests one parallel build action and local execution. Runtime scheduling remains unverified; this is not a memory limit."
+    report["build_configuration"] = build_configuration_plan(project)
     write_receipt(receipt_path, report)
     try:
         require(sys.version_info >= (3, 10), "Python 3.10 or newer is required")
@@ -388,15 +458,18 @@ def execute_gate(args):
         report["engine"] = engine
         report["commands"] = commands(engine, project, output)
         report["timeouts_seconds"] = {"build": args.build_timeout_seconds, "editor": args.test_timeout_seconds}
+        prepare_build_configuration(project, report["build_configuration"])
         if not args.run:
             report["status"] = "preflight_passed"
         else:
             require(engine["host"] in ("Linux", "Darwin"), "Windows native execution is not implemented; preflight only")
+            prepare_build_configuration(project, report["build_configuration"], create=True)
             write_receipt(receipt_path, report)
             build = run_process(report["commands"]["build"], project.parent,
                                 output / "build.log", args.build_timeout_seconds)
             report["phases"]["build"] = build
             require_process_success(build, "Unreal Build Tool")
+            verify_build_configuration(project, report["build_configuration"])
             report["evidence"]["toolchain_verified"] = True
             report["built_module"] = built_module(project, engine["target_platform"])
             report["evidence"]["editor_target_built"] = True
@@ -433,6 +506,7 @@ def execute_gate(args):
                     require(report["built_module_sha256_after"] == {key: report["built_module"][key]["sha256"]
                                                                    for key in ("manifest", "binary")},
                             "Built runtime module changed during Editor execution")
+                verify_build_configuration(project, report["build_configuration"])
             except (GateError, OSError) as error:
                 report["status"] = "failed" if args.run else "preflight_failed"
                 report["failure"] = "; ".join(x for x in (report["failure"], str(error)) if x)

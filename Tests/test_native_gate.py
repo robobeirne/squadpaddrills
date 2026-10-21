@@ -18,6 +18,7 @@ import time
 from types import SimpleNamespace
 import unittest
 from unittest import mock
+import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Tools/Unreal"))
 import native_gate as gate
@@ -216,6 +217,97 @@ class NativeGateTests(unittest.TestCase):
         self.assertIn(str(self.project), command)
         self.assertNotIn("-game", command)
         self.assertFalse(any(arg.lower().startswith("-testexit") for arg in command))
+        configuration = report["build_configuration"]
+        self.assertEqual(configuration["status"], "absent_would_create_on_run")
+        self.assertFalse(configuration["configured"])
+        self.assertFalse(configuration["runtime_policy_verified"])
+        self.assertFalse(Path(configuration["path"]).exists())
+        self.assertEqual(len(configuration["expected_sha256"]), 64)
+
+    def test_run_creates_then_reuses_exact_single_action_project_configuration(self):
+        self.args.run = True
+        path = self.project_root / "Saved/UnrealBuildTool/BuildConfiguration.xml"
+        namespace = {"ue": "https://www.unrealengine.com/BuildConfiguration"}
+        expected = {"MaxParallelActions": "1", "bAllowUBAExecutor": "false",
+                    "bAllowUBALocalExecutor": "false", "bAllowXGE": "false",
+                    "bAllowFASTBuild": "false", "bAllowSNDBS": "false"}
+
+        def failed_build(*_args):
+            # The real launcher must prepare this before invoking its build runner.
+            configuration = ET.fromstring(path.read_bytes()).find("ue:BuildConfiguration", namespace)
+            self.assertIsNotNone(configuration)
+            actual = {child.tag.split("}")[-1]: child.text for child in configuration}
+            self.assertEqual(actual, expected)
+            return self.phase(6)  # Synthetic failure: never create native-success evidence.
+
+        for index, expected_status in enumerate(("created", "reused_exact")):
+            self.args.run_id = f"configuration-{index}"
+            if index:
+                os.utime(path, ns=(1_000_000_000, 1_000_000_000))
+            with mock.patch.object(gate, "run_process", side_effect=failed_build) as process:
+                report, receipt_path = self.execute()
+            self.assertEqual(process.call_count, 1)
+            self.assertEqual(report["status"], "failed")
+            self.assertFalse(report["evidence"]["unreal_editor_executed"])
+            self.assertFalse(report["evidence"]["native_reader_contract_passed"])
+            record = report["build_configuration"]
+            self.assertEqual(record["status"], expected_status)
+            self.assertEqual(record["path"], str(path))
+            self.assertTrue(record["configured"])
+            self.assertFalse(record["runtime_policy_verified"])
+            self.assertEqual(record["expected_sha256"], gate.digest(path))
+            self.assertEqual(record["file"]["sha256"], record["sha256_after"])
+            self.assertEqual(record["requested_policy"]["max_parallel_actions"], 1)
+            self.assertEqual(json.loads(receipt_path.read_text())["build_configuration"], record)
+            if index:
+                self.assertEqual(path.stat().st_mtime_ns, 1_000_000_000)
+
+    def test_conflicting_or_symlinked_project_configuration_stops_before_build(self):
+        path = self.project_root / "Saved/UnrealBuildTool/BuildConfiguration.xml"
+        path.parent.mkdir(parents=True)
+        original = b"Existing user configuration must remain unchanged.\n"
+        path.write_bytes(original)
+        for run in (False, True):
+            self.args.run = run
+            self.args.run_id = f"conflicting-configuration-{run}"
+            with mock.patch.object(gate, "run_process") as process:
+                report, _ = self.execute()
+            process.assert_not_called()
+            self.assertIn("refusing to overwrite", report["failure"])
+            self.assertEqual(report["build_configuration"]["status"], "conflict")
+            self.assertFalse(report["build_configuration"]["configured"])
+            self.assertFalse(report["evidence"]["unreal_editor_executed"])
+            self.assertEqual(path.read_bytes(), original)
+        path.unlink()
+        outside = self.root / "outside.xml"
+        outside.write_bytes(gate.BUILD_CONFIGURATION_XML)
+        path.symlink_to(outside)
+        self.args.run_id = "symlinked-configuration"
+        with mock.patch.object(gate, "run_process") as process:
+            report, _ = self.execute()
+        process.assert_not_called()
+        self.assertIn("symlink", report["failure"])
+        self.assertEqual(outside.read_bytes(), gate.BUILD_CONFIGURATION_XML)
+        self.assertFalse(report["evidence"]["native_reader_contract_passed"])
+
+    def test_configuration_mutation_during_build_invalidates_receipt_before_editor(self):
+        self.args.run = True
+        path = self.project_root / "Saved/UnrealBuildTool/BuildConfiguration.xml"
+
+        def changed_configuration(*_args):
+            path.write_bytes(b"changed during synthetic build")
+            return self.phase()
+
+        with mock.patch.object(gate, "run_process", side_effect=changed_configuration) as process:
+            report, _ = self.execute()
+        self.assertEqual(process.call_count, 1)
+        self.assertEqual(report["status"], "failed")
+        self.assertIn("Project build configuration changed", report["failure"])
+        record = report["build_configuration"]
+        self.assertNotEqual(record["expected_sha256"], record["sha256_after"])
+        self.assertFalse(record["runtime_policy_verified"])
+        self.assertFalse(report["evidence"]["unreal_editor_executed"])
+        self.assertFalse(report["evidence"]["native_reader_contract_passed"])
 
     def test_missing_engine_ubt_wrong_version_and_script_editor_stop_before_build(self):
         cases = ("Engine/Build/Build.version", "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.dll",

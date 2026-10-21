@@ -1,9 +1,12 @@
 # Independent deletion of the first native-build worker
 
-Status on 21 October 2026: the driver, manual workflow and 19 controlled tests
-are implemented. No provider token has been configured, no live watchdog has
-been armed, and no VM has been created or deleted. The approved budget is
-US$5 including tax for one attempt; see [the compute plan](REMOTE_BUILD_COSTS.md).
+Status on 21 October 2026: the driver, manual workflow and controlled tests
+are implemented. The expected first-attempt profile is now regular Basic
+4 vCPU / 8 GiB RAM / 160 GiB disk, to fit published Tier 2 limits. All 21
+controlled watchdog tests passed locally alongside the native and SSH launcher
+tests. No provider token has been configured, no live watchdog has been
+armed, and no VM has been created or deleted. The approved budget is US$5
+including tax for one attempt; see [the compute plan](REMOTE_BUILD_COSTS.md).
 
 ## Purpose and boundaries
 
@@ -55,15 +58,32 @@ Required dispatch inputs are:
 | Input | Required value |
 | --- | --- |
 | `planned_name` | A new `squadpad-native-` name with an 8–40 character lowercase alphanumeric/hyphen suffix |
-| `size_slug` | The live-verified catalogue slug for the approved regular Storage-Optimized plan |
+| `size_slug` | The live-verified catalogue slug for the planned regular Basic 4 vCPU / 8 GiB / 160 GiB plan |
 | `image_id` | The live-verified numeric Ubuntu 22.04 x86-64 image ID |
 
 The exact slug and image ID are intentionally not guessed. The driver additionally
-checks `lon1`, 4 vCPU, memory `32768`, disk `600`, no backup feature, and a positive
-catalogue hourly price no greater than $0.39. The published estimate uses $0.38988.
-Its image-ID check depends on the operator having verified that ID's OS and
-architecture before launch. The first attempt permits no extra volumes,
-snapshots, backups or reserved IPs.
+checks `lon1`, 4 vCPU, memory `8192`, disk `160`, no backup feature, and a positive
+catalogue hourly price no greater than $0.072. The published regular Basic rate
+is $0.07143/hour, or $0.35715 for five hours before tax; even the accepted ceiling
+is $0.36 for five hours before tax. The old 32 GiB / 600 GiB profile is rejected.
+These values change the expected machine and price only; resource identity,
+creation window, deletion deadlines and API permissions retain their existing
+behavior.
+
+DigitalOcean's published Tier 2 limits include Basic plans up to $56/month; the
+planned regular Basic size is listed at $48/month. This makes it a candidate
+under the published tier rules, not evidence of live account eligibility or
+regional capacity. Verify that exact size, current price, LON1 availability and
+the Ubuntu 22.04 x86-64 image in the account before dispatch. The image-ID check
+depends on the operator having verified that ID's OS and architecture. Sources:
+[resource limits](https://docs.digitalocean.com/platform/resource-limits/) and
+[Droplet pricing](https://www.digitalocean.com/pricing/droplets).
+
+The first attempt permits no extra volumes, snapshots, backups or reserved IPs.
+Bounded swap, if configured by the worker preparation, occupies the included
+disk and does not add another provider resource. The watchdog does not prove
+that available memory or disk is sufficient for Unreal; the worker must pass
+the [native execution prerequisites](NATIVE_EXECUTION.md) before the build.
 
 ## Operate one bounded attempt
 

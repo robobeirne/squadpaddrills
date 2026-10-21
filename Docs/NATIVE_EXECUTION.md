@@ -19,12 +19,21 @@ It does not need the private athlete models, capture pack or imported content.
 ## The first attempt
 
 Use the cloud workspace as the SSH controller and one temporary Ubuntu 22.04
-x86-64 worker. The [compute plan](REMOTE_BUILD_COSTS.md) identifies the machine
-and approved budget. Before launch, establish provider access, a usable private
-route for transferring the complete inspected archive to the worker, and live
+x86-64 worker: DigitalOcean Basic, Regular, with 4 shared vCPU, 8 GiB RAM and
+160 GiB SSD in LON1. The [compute plan](REMOTE_BUILD_COSTS.md) records the
+$0.07143/hour rate and existing US$5 approval. Before launch, confirm actual
+account eligibility, catalogue size/image, capacity and tax. Establish provider
+access, a usable private route for transferring the complete inspected archive to the worker, and live
 independent deletion. Successful metadata access does not establish that the
 full transfer or build session can complete. The user's Mac remains outside
 this execution path.
+
+Epic [recommends 32 GB RAM for Linux development](https://dev.epicgames.com/documentation/en-us/unreal-engine/linux-development-requirements-for-unreal-engine).
+This smaller first attempt is limited to one project module with seven authored
+`.cpp` files against an installed engine, followed by one NullRHI reader test.
+Eight GiB sufficiency and completion time are unverified. The proposed fixed
+16 GiB swap file and requested one-action build configuration below require
+measured resources and real worker observations.
 
 Install the inspected Unreal 5.8.4 Linux package at the actual directory
 `/opt/unreal/UE_5.8`. That path must resolve to itself: the remote coordinator
@@ -81,17 +90,25 @@ Compare the installed metadata with these already observed raw-file hashes:
 Use this installation sequence after the access and independent-deletion
 prerequisites are satisfied:
 
-1. Transfer the complete archive privately onto the prepared worker. Verify its
+1. Record actual available disk, RAM and swap. Prepare a fixed 16 GiB swap file
+   on the included root disk only if measured space permits. The ZIP plus listed
+   expanded content total 108.77 GiB; with swap, the nominal remaining space is
+   35.23 GiB before the OS, filesystem overhead, workspace and caches. Stop if
+   measured resources are insufficient; no extra volume is part of this attempt.
+2. Transfer the complete archive privately onto the prepared worker. Verify its
    exact length and compute and record its full SHA-256 before extraction or
    execution. The full-file checksum is currently unavailable; it is obtained
    on the worker after transfer, not required before provisioning. A locally
    computed checksum records identity but does not by itself authenticate the
    publisher.
-2. Extract into the real `/opt/unreal/UE_5.8` directory so that
+3. Validate full ZIP integrity and extract into the real `/opt/unreal/UE_5.8` directory so that
    `Engine/Build/Build.version` is directly beneath it. Give the unprivileged
    build account the required access. Compare the extracted `Build.version`
    and `Linux_SDK.json` hashes with the values above and the archive receipt.
-3. Check the bundled compiler's actual version before native execution:
+   Only after successful integrity/extraction checks, discard the worker's
+   temporary downloaded ZIP before building to reclaim approximately 37.08 GiB.
+   Retain its size/hash record and the original supplied archive.
+4. Check the bundled compiler's actual version before native execution:
 
    ```sh
    SQUADPAD_ENGINE_ROOT=/opt/unreal/UE_5.8
@@ -99,7 +116,7 @@ prerequisites are satisfied:
    "$SQUADPAD_CLANG" --version
    ```
 
-4. Inspect the native preflight receipt, then run the build and reader gate.
+5. Inspect the native preflight receipt, then run the build and reader gate.
    Confirm in the real UBT log that it selects the expected bundled v26 compiler.
    Compiler startup, UBT selection and a successful native build are separate
    checks; none has been executed during archive inspection.
@@ -138,8 +155,20 @@ driver can terminate compiler or Editor children after a timeout. Windows
 preflight is supported, but Windows execution is not implemented. The remote
 coordinator below supports Linux only.
 
-UBT uses its installed parallelism configuration and automatic resource
-scheduling. The driver does not claim or configure a fixed compiler-action cap.
+For `--run`, the driver prepares the project's
+`Saved/UnrealBuildTool/BuildConfiguration.xml`, requesting `MaxParallelActions=1`
+and setting `bAllowUBAExecutor`, `bAllowUBALocalExecutor`, `bAllowXGE`,
+`bAllowFASTBuild` and `bAllowSNDBS` to `false`. An existing conflicting project
+configuration is refused. Preflight reads/plans this configuration without
+creating or modifying it. Epic documents the
+[project XML location and executor settings](https://dev.epicgames.com/documentation/en-us/unreal-engine/build-configuration-for-unreal-engine).
+
+The receipt records the requested configuration and its hash. It does not
+establish actual scheduler behavior or peak memory, and the setting is not a
+process-memory limit. Observe compiler/PCH generation, linking, Editor startup
+and swap pressure on the worker. Stop on insufficient storage or memory, a broad
+engine rebuild, unrecoverable failure or the workload deadline; retain evidence
+and leave the existing timeouts and independent deletion deadlines in force.
 
 The Editor invocation uses the documented
 [`Automation RunTest ...;Quit` and `ReportExportPath`](https://dev.epicgames.com/documentation/en-us/unreal-engine/run-automation-tests-in-unreal-engine)

@@ -46,9 +46,9 @@ class SyntheticProvider:
         self.preexisting, self.deleted = False, False
         self.droplet = {"id": 987654321, "created_at": guard.utc(BASE + 30),
                         "name": CONFIG.name, "size_slug": CONFIG.size, "vcpus": 4,
-                        "memory": 32768, "disk": 600, "region": {"slug": "lon1"},
+                        "memory": 8192, "disk": 160, "region": {"slug": "lon1"},
                         "image": {"id": CONFIG.image_id}, "size": {"slug": CONFIG.size,
-                        "price_hourly": 0.38988000000000002}, "features": ["private_networking"],
+                        "price_hourly": 0.07143000000000001}, "features": ["private_networking"],
                         "backup_ids": [], "snapshot_ids": [], "volume_ids": []}
 
     def request(self, method, path):
@@ -87,11 +87,15 @@ class DropletWatchdogTests(unittest.TestCase):
         if reason:
             self.assertEqual(receipt["failure_reason"], reason)
 
-    def test_arms_then_binds_then_deletes_exact_id_at_provider_age(self):
+    def test_basic_profile_arms_binds_and_deletes_exact_id_at_provider_age(self):
         receipt = self.run_guard()
         self.assertEqual([e["status"] for e in self.events], ["armed", "bound", "deleting", "deleted_verified"])
         self.assertIsNone(self.events[0]["bound"])
         self.assertEqual(receipt["bound"]["id"], self.provider.droplet["id"])
+        self.assertEqual(receipt["expected"]["memory"], 8192)
+        self.assertEqual(receipt["expected"]["disk"], 160)
+        self.assertEqual(receipt["expected"]["hourly_usd_ceiling"], "0.072")
+        self.assertEqual(receipt["bound"]["observed_hourly_usd"], "0.07143000000000001")
         self.assertTrue(receipt["deletion_verified"])
         self.assertTrue(receipt["deletion_before_deadline"])
         self.assertFalse(receipt["billing_cap_guaranteed"])
@@ -130,7 +134,7 @@ class DropletWatchdogTests(unittest.TestCase):
             lambda d: d.update(vcpus=8), lambda d: d.update(memory=65536), lambda d: d.update(disk=True),
             lambda d: d.update(size_slug="wrong-size"), lambda d: d["size"].update(slug="wrong-size"),
             lambda d: d["region"].update(slug="nyc3"), lambda d: d["image"].update(id=999),
-            lambda d: d["size"].update(price_hourly=0.391), lambda d: d["size"].update(price_hourly="NaN"),
+            lambda d: d["size"].update(price_hourly="NaN"),
             lambda d: d.update(features=["backups"]), lambda d: d.update(backup_ids=[1]),
             lambda d: d.update(snapshot_ids=[2]), lambda d: d.update(volume_ids=["extra"]),
             lambda d: d.update(id=True), lambda d: d.update(name=CONFIG.name.upper()),
@@ -143,6 +147,33 @@ class DropletWatchdogTests(unittest.TestCase):
                 self.assert_failed_without_absence(receipt)
                 self.assertIsNone(receipt["bound"])
                 self.assertEqual(receipt["delete_attempts"], 0)
+
+    def test_previous_storage_profile_is_not_adopted(self):
+        self.provider.droplet.update(memory=32768, disk=600)
+        self.provider.droplet["size"].update(price_hourly="0.38988")
+        receipt = self.run_guard()
+        self.assert_failed_without_absence(receipt, "unexpected_droplet_configuration")
+        self.assertTrue(receipt["armed"])
+        self.assertIsNone(receipt["bound"])
+        self.assertEqual(receipt["delete_attempts"], 0)
+        self.assertFalse(any(method == "DELETE" for method, _, _ in self.provider.calls))
+
+    def test_basic_price_ceiling_accepts_boundary_and_rejects_overage(self):
+        for price in ("0.072", "0.072000001", "0.38988"):
+            with self.subTest(price=price):
+                self.setUp()
+                self.provider.droplet["size"]["price_hourly"] = price
+                self.provider.early_delete_at = 40
+                receipt = self.run_guard()
+                if price == "0.072":
+                    self.assertEqual(receipt["status"], "deleted_verified")
+                    self.assertTrue(receipt["deletion_before_deadline"])
+                    self.assertEqual(receipt["bound"]["observed_hourly_usd"], price)
+                else:
+                    self.assert_failed_without_absence(receipt, "hourly_price_above_ceiling_or_invalid")
+                    self.assertIsNone(receipt["bound"])
+                    self.assertEqual(receipt["delete_attempts"], 0)
+                    self.assertFalse(any(method == "DELETE" for method, _, _ in self.provider.calls))
 
     def test_old_future_or_invalid_provider_time_is_not_adopted(self):
         for timestamp in (guard.utc(BASE - 1), guard.utc(BASE + 36), "invalid", "2026-99-99T00:00:00Z"):
