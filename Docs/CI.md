@@ -31,15 +31,15 @@ The workflow writes its execution receipt to the runner's temporary directory,
 then includes it in the job summary. It does not overwrite the historical checked-in
 reports, upload an artifact or commit generated results.
 
-## Native launcher tests
+## Native launcher and deletion watchdog tests
 
 The same Python 3.12 job additionally runs:
 
 ```sh
-python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate -v
+python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate Tests.test_droplet_watchdog -v
 ```
 
-A separate five-minute job repeats only these launcher tests using Python 3.10,
+A separate five-minute job repeats these 51 launcher and watchdog tests using Python 3.10,
 the proposed Ubuntu 22.04 worker's interpreter family. The cases exercise report
 rejection, process timeouts and child cleanup, source identity, fixed SSH
 arguments, bounded output, receipt validation and failure evidence preservation.
@@ -47,6 +47,12 @@ The subprocess cases use ordinary local Python programs. Controlled test
 fixtures stand in for the engine files, reports and transport. No actual Unreal
 process or SSH connection runs in either job, and these tests produce no native
 acceptance receipt.
+
+The 19 watchdog cases use a synthetic clock and controlled provider responses.
+They cover fresh-name arming, exact-ID binding, configuration rejection, timed
+deletion, retries, permission errors, incomplete discovery, cancellation, stale
+receipts, clock changes and explicit absence verification. They make no provider
+API calls and cannot establish live account access, deletion or billing results.
 
 ## Evidence this workflow cannot provide
 
@@ -90,6 +96,12 @@ manual-only SSH coordinator for an operator-prepared worker. It does not run
 on a pull request or register a self-hosted runner. Its prerequisites,
 credential handling, private evidence collection and execution limits are
 documented in [Native execution](NATIVE_EXECUTION.md).
+
+The independent [`droplet-watchdog.yml`](../.github/workflows/droplet-watchdog.yml)
+is also manual-only and dormant. It requires separate provider credentials and
+live arming before a temporary machine is created. Its 330-minute timeout and
+cleanup responsibilities are described in [Deletion watchdog](DROPLET_WATCHDOG.md).
+Neither manual workflow is started by the portable tests.
 
 Actions are pinned to full commit hashes. The following version tags and commit
 objects were verified against their official GitHub repositories on 2026-10-20:

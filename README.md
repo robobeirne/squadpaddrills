@@ -81,8 +81,12 @@ three.js viewer remain separate source projects.
 Run the [native build and reader gate](Docs/NATIVE_EXECUTION.md) in a suitable
 Unreal environment. Its first test uses only public source and the compiled
 fixture. The source increment includes a bounded native launcher, SSH
-coordinator and dormant manual workflow. The [remote compute proposal](Docs/REMOTE_BUILD_COSTS.md)
-prices one attempt; no worker has been provisioned or paid execution authorized.
+coordinator and dormant manual workflow. The [remote compute plan](Docs/REMOTE_BUILD_COSTS.md)
+has an approved **US$5 total budget, including tax, for one attempt** as of
+21 October 2026. No worker has been provisioned. Provider access, the exact Epic
+engine archive and live cleanup configuration remain outstanding.
+The separate [deletion watchdog](Docs/DROPLET_WATCHDOG.md) is implemented and
+tested with controlled provider responses; it has not been armed against an account.
 
 After that gate passes, restore the reviewed asset inputs, import and reopen them, then build the
 saved runtime probe. Inspect real animation poses and playback controls before

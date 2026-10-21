@@ -1,8 +1,11 @@
 # First native Unreal build and reader test
 
-Status on 20 October 2026: launchers and offline tests are implemented. No Unreal
-build, native automation test, worker connection or paid provisioning has occurred.
-The project still has no verified native binary or visual result.
+Status on 21 October 2026: launchers, an independent deletion watchdog and offline
+tests are implemented. The user approved up to US$5 including tax for one native
+build attempt. Provider access, the exact engine archive and live watchdog
+configuration remain outstanding. No Unreal build, native automation test,
+worker connection or paid provisioning has occurred. The project still has no
+verified native binary or visual result.
 
 This is the first part of SP2. It compiles `SquadPad3DEditor` and executes
 `SquadPad.Runtime.PlaybackReader.Contract` using a real installed Unreal engine.
@@ -12,9 +15,9 @@ It does not need the private athlete models, capture pack or imported content.
 ## The first attempt
 
 Use the cloud workspace as the SSH controller and one temporary Ubuntu 22.04
-x86-64 worker. The [compute proposal](REMOTE_BUILD_COSTS.md) identifies the
-machine and proposed budget. Provider and Epic access, the exact installed
-engine archive and independent deletion still need to be arranged before launch.
+x86-64 worker. The [compute plan](REMOTE_BUILD_COSTS.md) identifies the machine
+and approved budget. Provider and Epic access, the exact installed engine archive
+and live independent deletion still need to be arranged before launch.
 The user's Mac remains outside this execution path.
 
 The engine must be the official Unreal 5.8 Linux installed build at
@@ -31,9 +34,11 @@ does not need repository write access, GitHub credentials, provider administrato
 credentials, Apple credentials or a GitHub runner registration.
 
 Record the worker resource ID, creation time, CPU, memory, disk and OS in the
-private execution record. Configure and verify deletion from a separate trusted
-controller. Native and SSH timeouts do not delete the VM. Collect the evidence
-before the deletion deadline, including failure evidence if the build fails.
+private execution record. The separate [deletion watchdog](DROPLET_WATCHDOG.md)
+must already be running and visibly armed before provisioning. Confirm it binds
+the new provider ID and creation time immediately afterward. Native and SSH
+timeouts do not delete the VM. Collect the evidence before the deletion deadline,
+including failure evidence if the build fails.
 
 ## Execute on an already prepared worker
 
@@ -165,9 +170,9 @@ and temporarily on the GitHub runner. Private collection from the worker is
 required before deletion. The first attempt uses the direct cloud controller
 above so its returned evidence is immediately available for review.
 
-The portable workflow tests both launchers on Python 3.12 and 3.10 without
-Unreal or an SSH connection. Those jobs can run on the draft PR. They do not
-enable or invoke this native workflow.
+The portable workflow tests both launchers and the deletion watchdog on Python
+3.12 and 3.10 without Unreal, SSH or provider API calls. Those jobs can run on the
+draft PR. They do not enable or invoke either manual workflow.
 
 ## After this gate passes
 

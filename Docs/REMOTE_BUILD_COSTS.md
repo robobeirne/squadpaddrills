@@ -1,14 +1,14 @@
-# SP2 first native run: remote compute proposal
+# SP2 first native run: approved remote compute budget
 
-Checked against official sources on 20 October 2026. This is a proposal only. No account, paid resource, remote connection or purchase has been created. Mac access remains paused.
+Prices checked against official sources on 20 October 2026. The user approved up to **US$5 including tax for one attempt** on 21 October 2026. No account, paid resource, worker connection or purchase has been created. Provider and engine access remain unverified. Mac access remains paused.
 
 ## Recommendation
 
 Use one temporary DigitalOcean Storage-Optimized Linux VM in **LON1**, reached over direct SSH, for the first native build and reader-contract test. Choose the regular 4 dedicated vCPU, 32 GiB RAM, 600 GiB NVMe plan at **$0.38988/hour**. The bundled public IPv4 and disk have no additional charge. The provider lists this plan family in LON1, but the exact size's account eligibility and live capacity must be confirmed. It will not be registered as a self-hosted GitHub runner. [1,2,14]
 
-Propose **up to US$5 in provider charges, including applicable tax, for one attempt**, subject to the user's approval and authenticated provider/Epic access. Four hours for installation and execution cost $1.55952; a further one-hour cleanup allowance is $0.38988, making **$1.9494 before tax**. As an illustrative calculation only, 25% tax would make that $2.43675, leaving $2.56325 within the proposed authorization. The actual tax must be checked in the account; no exchange-rate or bank-fee guarantee is implied. Promotional credits are not assumed.
+The approved allowance is **up to US$5 in provider charges, including applicable tax, for one attempt**. Authenticated provider/Epic access remains a launch prerequisite; the budget does not need to be approved again. Four hours for installation and execution cost $1.55952; a further one-hour cleanup allowance is $0.38988, making **$1.9494 before tax**. As an illustrative calculation only, 25% tax would make that $2.43675, leaving $2.56325 within the authorization. The actual tax must be checked in the account; no exchange-rate or bank-fee guarantee is implied. Promotional credits are not assumed.
 
-Four and five hours are workload and deletion deadlines, **not a provider-enforced billing cap**. Independent teardown has not been configured or verified. No paid resource should start until the access, approval and deletion prerequisites below are satisfied. Completion within the allowance is unproven; the authorization buys one attempt, not a guaranteed successful Unreal build.
+Four and five hours are workload and deletion deadlines, **not a provider-enforced billing cap**. Independent teardown is implemented in source but has not been configured or verified against an account. No paid resource should start until the access and live deletion prerequisites below are satisfied. Completion within the allowance is unproven; the authorization buys one attempt, not a guaranteed successful Unreal build.
 
 The reason to favor this plan is storage headroom: the exact Unreal 5.8 archive and extracted-install size have not been inspected. The extra disk avoids betting the first native run on a 240 GB system volume. This is an engineering choice, not an Unreal minimum-storage specification.
 
@@ -27,14 +27,16 @@ Hetzner's CX53 would be still cheaper at €0.0481/hour including IPv4, with 16 
 
 1. Confirm an authorized Epic account can obtain the exact **5.8 Linux installed ZIP**. Epic documents precompiled Linux installations and sign-in-protected downloads, plus `SetupToolchain.sh` for C++ development. The public documentation does not establish which exact archive is accessible in this user's account. Do not substitute a full engine-source build within this budget. [8]
 2. Record the archive version, checksum, compressed size and, where available, expanded-size estimate. Pin the chosen project commit. The first test uses the public playback fixture; private athlete models and mocap are not prerequisites for this narrow gate.
-3. Confirm the provider account, billing currency, applicable tax, regular plan price, image availability and capacity. No account creation, card entry or resource launch is included in this preparation.
+3. Confirm the provider account, billing currency, applicable tax, regular plan price, image availability and capacity. No account creation, card entry or resource launch has occurred during preparation.
 4. Make the build script, exact test invocation, evidence destination and deletion mechanism reviewable. Use one VM, with no autoscaling, backups, snapshot, block volume or reserved IP added. Configure an independent deletion process outside the guest; a workflow timeout or operating-system shutdown alone does not stop provider billing. Provider administration credentials stay outside the guest and the public repository.
 
-## Independent deletion plan, still to configure
+## Independent deletion implementation, still to configure live
 
-At provisioning, record the provider resource ID and provider creation timestamp in the trusted controller. A separate controller task must continue even if the SSH session, native test or guest fails. It can run in an explicitly authorized external automation environment; it must not depend on a process inside the rented VM. Keep the narrowly scoped provider deletion credential there, not on the guest.
+The [deletion watchdog](DROPLET_WATCHDOG.md) and its dormant manual GitHub workflow now implement the separate controller. The workflow must be available on the default branch, configured with a restricted cleanup token, started and observed in its `armed` state before the VM is created. Its source and controlled tests do not establish that a live guard is running. At provisioning, it binds the exact provider resource ID and creation timestamp. The job runs independently of the SSH session, native test and guest. Keep the provider deletion credential in the external controller, not on the guest.
 
-Set the workload deadline at four hours from creation. Export allowlisted reports and logs promptly. Schedule unconditional deletion of that exact resource ID at four hours forty-five minutes, with verification and retries before the five-hour deletion deadline. Confirm the resource no longer exists through the provider API and record that receipt. Verify that no optional paid resources were added or retained. The account owner needs a direct provider-console fallback if the controller fails. This is a plan, not an implemented spend-control guarantee; do not describe the local driver's timeouts as a cost cap.
+Set the workload deadline at four hours from creation. Export allowlisted reports and logs promptly. The watchdog requests deletion of the bound ID at four hours forty-five minutes, with verification and retries before the five-hour deadline. Only a fresh exact-ID API response confirming absence establishes deletion. Verify separately that no optional paid resources were added or retained. The account owner needs a direct provider-console fallback if the controller fails. No live deletion has been tested; neither watchdog timeouts nor native-driver timeouts guarantee a billing cap.
+
+The watchdog accepts an observed catalogue rate of at most **$0.39/hour** to allow for price representation, while this estimate retains the published $0.38988 rate. Even at that ceiling, five hours would be $1.95 before tax. The approved $5 total still governs the attempt; actual tax and account charges must fit it before launch.
 
 ## What the attempt should do
 
@@ -54,7 +56,7 @@ Hetzner also bills powered-off instances. Delete both the server and its separat
 
 ## Later GPU and Apple stages
 
-For a separate visual trial, DigitalOcean publishes an on-demand RTX 4000 Ada VM in **TOR1**, with 20 GB VRAM, 8 vCPU, 32 GiB RAM and a 500 GiB NVMe boot disk at **$0.76/hour**. Four hours would be **$3.04 before tax**, independently approved. Stock Linux images are supported with manually installed drivers. This is a candidate GPU workstation environment, not a promise of an included Unreal desktop, remote-desktop product or Windows licence. [9,10,11]
+For a separate visual trial, DigitalOcean publishes an on-demand RTX 4000 Ada VM in **TOR1**, with 20 GB VRAM, 8 vCPU, 32 GiB RAM and a 500 GiB NVMe boot disk at **$0.76/hour**. Four hours would be **$3.04 before tax**, requiring separate approval. Stock Linux images are supported with manually installed drivers. This is a candidate GPU workstation environment, not a promise of an included Unreal desktop, remote-desktop product or Windows licence. [9,10,11]
 
 The first GPU acceptance checks should be a suitable NVIDIA graphics/Vulkan driver, `vulkaninfo`, an actual Unreal rendered frame, and successful capture/review of that frame. Epic's current Linux guidance calls for NVIDIA 570+ and recommends at least 8 GB VRAM. An AI/CUDA-ready image alone does not prove graphical compatibility. Interactive remote desktop, if required, needs its own tested setup. CPU-only results cannot substitute for this stage. [8,11]
 

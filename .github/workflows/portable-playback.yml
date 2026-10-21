@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   portable-playback:
-    name: Python contract and C++17 playback
+    name: Python contracts, execution guards and C++17 playback
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -34,8 +34,8 @@ jobs:
       - name: Test published fixture contracts and playback controls
         run: python3 -B -m unittest Tests.test_playback -v
 
-      - name: Test native launcher and SSH coordinator without an engine or network
-        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate -v
+      - name: Test native launchers and Droplet watchdog without an engine or network
+        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate Tests.test_droplet_watchdog -v
 
       - name: Compile C++17 core and compare with Python reference
         run: python3 -B Tools/Playback/verify_native.py --report "$RUNNER_TEMP/runtime-core-validation.json"
@@ -53,6 +53,7 @@ jobs:
               "## Portable playback checks passed",
               "",
               "Python contract and control tests ran against the published first-pass fixture.",
+              "Synthetic launcher and watchdog tests check failure handling; they do not establish live Unreal or cloud cleanup success.",
               "",
               f"- C++17 core assertions: {report['unit_checks']}",
               f"- C++/Python comparisons: {report['native_reference_comparisons']}",
@@ -78,7 +79,7 @@ jobs:
           PY
 
   native-launcher-python310:
-    name: Native launcher compatibility with Python 3.10
+    name: Native launcher and cleanup guard compatibility with Python 3.10
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -95,5 +96,5 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Verify launcher behavior without connecting to a worker
-        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate -v
+      - name: Verify launcher and watchdog behavior without a worker or cloud provider
+        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate Tests.test_droplet_watchdog -v

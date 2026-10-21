@@ -1,7 +1,7 @@
 {
   "researched_on": "2026-10-20",
-  "status": "proposal_only",
-  "paid_compute_authorized": false,
+  "status": "budget_approved_access_and_live_cleanup_pending",
+  "paid_compute_authorized": true,
   "resources_provisioned": false,
   "mac_access_paused": true,
   "scope": {
@@ -17,9 +17,7 @@
     "private_asset_bundle_required_for_initial_gate": false
   },
   "budget_assumptions": {
-    "proposed_authorization_currency": "USD",
-    "proposed_authorization_including_tax": "5.00",
-    "authorization_granted": false,
+    "authorization_granted": true,
     "work_window_hours": 4,
     "cleanup_reserve_hours": 1,
     "unconditional_delete_target_hours": 4.75,
@@ -31,13 +29,18 @@
     "published_rate_includes_tax": false,
     "illustrative_tax_rate_not_verified": "0.25",
     "five_hour_cost_with_illustrative_tax": "2.43675",
-    "remaining_in_proposed_authorization_after_illustrative_tax": "2.56325",
     "currency_conversion_included": false,
     "promotional_credits_assumed": false,
     "paid_snapshot_or_volume_retention": false,
     "egress_overage_assumed": false,
     "build_success_guaranteed": false,
-    "parallel_compile_policy": "UBT installed configuration and automatic CPU/memory scheduling; no fixed action cap configured"
+    "parallel_compile_policy": "UBT installed configuration and automatic CPU/memory scheduling; no fixed action cap configured",
+    "authorization_currency": "USD",
+    "authorization_including_tax": "5.00",
+    "authorization_granted_on": "2026-10-21",
+    "remaining_in_authorization_after_illustrative_tax": "2.56325",
+    "independent_deletion_source_implemented": true,
+    "watchdog_observed_hourly_usd_ceiling": "0.39"
   },
   "options": [
     {
@@ -210,6 +213,47 @@
     },
     "apple_device_testing": {
       "url": "https://developer.apple.com/documentation/xcode/running-your-app-on-simulated-or-physical-devices"
+    },
+    "do_droplet_api": {
+      "url": "https://docs.digitalocean.com/products/droplets/reference/api/droplets/"
+    },
+    "github_hosted_limits": {
+      "url": "https://docs.github.com/en/actions/reference/limits"
+    },
+    "github_manual_dispatch": {
+      "url": "https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow"
     }
+  },
+  "approval_recorded_on": "2026-10-21",
+  "access_status": {
+    "provider_account_access_verified": false,
+    "epic_archive_access_verified": false,
+    "exact_live_size_slug_verified": false,
+    "exact_live_image_id_verified": false,
+    "provider_tax_verified": false,
+    "cleanup_token_configured": false,
+    "watchdog_armed": false,
+    "native_execution_occurred": false,
+    "resources_created_by_this_work": 0,
+    "provider_charges_incurred_by_this_work_usd": "0.00"
+  },
+  "independent_deletion": {
+    "implementation": "Tools/Cloud/droplet_watchdog.py",
+    "workflow": ".github/workflows/droplet-watchdog.yml",
+    "documentation": "Docs/DROPLET_WATCHDOG.md",
+    "source_status": "implemented_with_controlled_provider_tests",
+    "live_status": "not_configured_or_executed",
+    "controller": "standard_github_hosted_ubuntu_24_04",
+    "controller_timeout_minutes": 330,
+    "creation_window_seconds": 900,
+    "required_scopes": [
+      "droplet:read",
+      "droplet:delete"
+    ],
+    "secret_name": "SQUADPAD_DO_CLEANUP_TOKEN",
+    "readiness_variable": "SQUADPAD_DO_WATCHDOG_ENABLED",
+    "must_observe_live_armed_before_creation": true,
+    "verification": "fresh_exact_id_get_404_before_provider_age_5_hours",
+    "provider_hard_dollar_cap": false
   }
 }
