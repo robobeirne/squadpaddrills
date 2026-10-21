@@ -1,0 +1,154 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "squadpad.athlete-bindings.v1"
+    },
+    "playback_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "playback_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/profile"
+      },
+      "minItems": 1
+    },
+    "slots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/slot"
+      },
+      "minItems": 1
+    }
+  },
+  "required": [
+    "schema",
+    "playback_id",
+    "playback_sha256",
+    "profiles",
+    "slots"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:squadpad:athlete-bindings:v1",
+  "title": "SquadPad SP1 athlete bindings",
+  "description": "Shape only. validate_bindings enforces exact slot coverage, canonical durations, playback hash, rig compatibility and mesh-bound calibration. validate_bindings_with_source_files additionally compares against validated current export bytes.",
+  "$defs": {
+    "animation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_motion_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "animation_asset_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "skeleton_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "target_mesh_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "animation_source_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "duration_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "source_motion_id",
+        "animation_asset_id",
+        "skeleton_id",
+        "target_mesh_sha256",
+        "animation_source_sha256",
+        "duration_seconds"
+      ]
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "skeleton_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "mesh_asset_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "mesh_source_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "animations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/animation"
+          },
+          "minItems": 1
+        },
+        "calibration": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "const": "unmeasured"
+            },
+            "mesh_source_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "status",
+            "mesh_source_sha256"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "skeleton_id",
+        "mesh_asset_id",
+        "mesh_source_sha256",
+        "animations",
+        "calibration"
+      ]
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "appearance_slot": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "profile_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        }
+      },
+      "required": [
+        "appearance_slot",
+        "profile_id"
+      ]
+    }
+  }
+}

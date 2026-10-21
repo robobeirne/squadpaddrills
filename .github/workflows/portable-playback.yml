@@ -1,0 +1,100 @@
+name: Portable playback
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portable-playback-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable-playback:
+    name: Python contracts, execution guards and C++17 playback
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out public source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          lfs: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Test published fixture contracts and playback controls
+        run: python3 -B -m unittest Tests.test_playback -v
+
+      - name: Test native launchers and Droplet watchdog without an engine or network
+        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate Tests.test_droplet_watchdog Tests.test_inspect_remote_worker -v
+
+      - name: Compile C++17 core and compare with Python reference
+        run: python3 -B Tools/Playback/verify_native.py --report "$RUNNER_TEMP/runtime-core-validation.json"
+
+      - name: Record results and evidence limits
+        shell: bash
+        run: |
+          python3 -B - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads((Path(os.environ["RUNNER_TEMP"]) / "runtime-core-validation.json").read_text())
+          lines = [
+              "## Portable playback checks passed",
+              "",
+              "Python contract and control tests ran against the published first-pass fixture.",
+              "Synthetic launcher and watchdog tests check failure handling; they do not establish live Unreal or cloud cleanup success.",
+              "",
+              f"- C++17 core assertions: {report['unit_checks']}",
+              f"- C++/Python comparisons: {report['native_reference_comparisons']}",
+              f"- Samples of the first-pass fixture: {report['actual_fixture_samples']}",
+              f"- Playback controller states: {report['controller_states']}",
+              "",
+              "### Evidence unavailable in this workflow",
+              "",
+              "Source-asset provenance and regeneration, Unreal compilation, the native JSON reader,",
+              "FBX import, skeletal pose evaluation, contact geometry, rendered visual quality and",
+              "iPhone execution are not tested here. Those stages need separate assets, tools and evidence.",
+              "The separate asset-dependent test suites are outside this job; they are not skipped successes.",
+              "",
+              "<details><summary>Portable execution receipt</summary>",
+              "",
+              "```json",
+              json.dumps(report, indent=2),
+              "```",
+              "</details>",
+          ]
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as summary:
+              summary.write("\n".join(lines) + "\n")
+          PY
+
+  native-launcher-python310:
+    name: Native launcher and cleanup guard compatibility with Python 3.10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out public source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          lfs: false
+          submodules: false
+
+      - name: Set up the worker's Python version
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+
+      - name: Verify launcher and watchdog behavior without a worker or cloud provider
+        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate Tests.test_droplet_watchdog Tests.test_inspect_remote_worker -v

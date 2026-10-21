@@ -1,0 +1,229 @@
+{
+  "schema": "squadpad.athlete-audition.v1",
+  "revision": 1,
+  "created_on": "2026-10-20",
+  "purpose": "SP3 preparation: repeatable two-candidate review requirements; no native scene exists",
+  "path_base": "package_root",
+  "units": {"distance": "centimetres", "time": "seconds", "angle": "degrees"},
+  "axes": "unreal-z-up-x-forward-y-right",
+  "status": {
+    "specification": "prepared",
+    "scene_builder": "unavailable",
+    "native_scene": "unavailable",
+    "comparison": "unreviewed",
+    "selected_candidate_id": null,
+    "engine_version": null,
+    "engine_build_id": null,
+    "device_model": null,
+    "device_os": null,
+    "measurements": null,
+    "visual_acceptance": false
+  },
+  "sources": {
+    "mocap_index": {
+      "path": "SourceInputs/mocap-drills.json",
+      "sha256": "94056bf9862cec4375c223a8a686b84b66521bfb86f0fdca54b0d8f78b4a8b10",
+      "status": "supplied_bytes_present"
+    },
+    "mocap_binary": {
+      "path": "SourceInputs/mocap-drills.bin",
+      "sha256": "6e1aa4034c677d140fc95a0082db5eeb3a4ac550d6936f9e588b5fe6036bbce0",
+      "status": "supplied_bytes_present"
+    },
+    "pass_fixture": {
+      "path": "Fixtures/first_pass.drill.json",
+      "sha256": "9eee1a7c15b9ad3a4332f5c69e391cef26920e7911e3913a0a632dd99011140e",
+      "status": "existing_observed_segment_fixture",
+      "source_currentness_reverified": false,
+      "complete_drill": false
+    },
+    "baseline_mesh": {
+      "path": "DerivedInputs/athlete_a_shoulders.glb",
+      "sha256": "9c67ac4d1d84ac17d349cd03ec6b87e79230458573661f065909e76d19f542eb",
+      "status": "derived_baseline_bytes_present",
+      "complete_fitting_body": false
+    },
+    "baseline_export_receipt": {
+      "path": "SourceData/athlete_a/export_manifest.json",
+      "sha256": "aa68bc0c19899ff946d96c04cc8b8104fdba671af3e81961cb692a3c84dd1815",
+      "status": "existing_blender_export_evidence"
+    }
+  },
+  "baseline": {
+    "id": "athlete_a_baseline",
+    "role": "reference_only",
+    "mesh_source_ref": "baseline_mesh",
+    "export_receipt_source_ref": "baseline_export_receipt",
+    "availability": "local_baseline_present",
+    "native_binding": null,
+    "native_review": "unreviewed",
+    "calibrations": null,
+    "known_limits": [
+      "Covered torso surfaces are missing",
+      "Localized shoulder correction only",
+      "Kit and surface quality remain weak",
+      "Idle/action transitions are unblended",
+      "No native support-foot trace",
+      "Boot contacts are provisional",
+      "Receiving ball holds at provisional arrival centre"
+    ]
+  },
+  "candidates": [
+    {
+      "id": "optimized_metahuman",
+      "family": "optimized_metahuman_with_fitted_football_kit",
+      "availability": "unavailable",
+      "review": "unreviewed",
+      "asset_binding": null,
+      "source_uri": null,
+      "licence_record": null,
+      "price": null,
+      "complete_fitting_body": null,
+      "shipping_settings": null,
+      "calibrations": null,
+      "measurements": null
+    },
+    {
+      "id": "shared_athlete_rig",
+      "family": "game_ready_athlete_on_controlled_shared_rig",
+      "availability": "unavailable",
+      "review": "unreviewed",
+      "asset_binding": null,
+      "source_uri": null,
+      "licence_record": null,
+      "price": null,
+      "complete_fitting_body": null,
+      "shipping_settings": null,
+      "calibrations": null,
+      "measurements": null
+    }
+  ],
+  "source_motions": [
+    {"id": "idle", "index_source_ref": "mocap_index", "clip_key": "idle", "source_state": "present", "baseline_fbx_path": "SourceData/athlete_a/idle.fbx", "candidate_retargets": "unavailable", "technique_review": "unreviewed"},
+    {"id": "pass", "index_source_ref": "mocap_index", "clip_key": "pass", "source_state": "present", "baseline_fbx_path": "SourceData/athlete_a/pass.fbx", "candidate_retargets": "unavailable", "technique_review": "unreviewed"},
+    {"id": "receive", "index_source_ref": "mocap_index", "clip_key": "receive", "source_state": "present", "baseline_fbx_path": "SourceData/athlete_a/receive.fbx", "candidate_retargets": "unavailable", "technique_review": "unreviewed"},
+    {"id": "sprint", "index_source_ref": "mocap_index", "clip_key": "sprint", "source_state": "present", "baseline_fbx_path": null, "candidate_retargets": "unavailable", "technique_review": "unreviewed"},
+    {"id": "jogL90", "index_source_ref": "mocap_index", "clip_key": "jogL90", "source_state": "present", "baseline_fbx_path": null, "candidate_retargets": "unavailable", "technique_review": "unreviewed"},
+    {"id": "jogR90", "index_source_ref": "mocap_index", "clip_key": "jogR90", "source_state": "present", "baseline_fbx_path": null, "candidate_retargets": "unavailable", "technique_review": "unreviewed"},
+    {"id": "pivotL180", "index_source_ref": "mocap_index", "clip_key": "pivotL180", "source_state": "present", "baseline_fbx_path": null, "candidate_retargets": "unavailable", "technique_review": "unreviewed"},
+    {"id": "pivotR180", "index_source_ref": "mocap_index", "clip_key": "pivotR180", "source_state": "present", "baseline_fbx_path": null, "candidate_retargets": "unavailable", "technique_review": "unreviewed"}
+  ],
+  "scene_requirements": {
+    "ground_plane_z_cm": 0.0,
+    "ball_radius_cm": 11.0,
+    "ball_radius_basis": "existing first_pass fixture review assumption",
+    "canvas_pixels": [1280, 720],
+    "canvas_status": "proposed_authoring_comparison_format",
+    "shipping_device_resolution": null,
+    "individual_candidate_rescaling": false,
+    "individual_candidate_auto_framing": false,
+    "frame_fit": {
+      "method": "fit_union_bounds_once_then_freeze",
+      "members": ["athlete_a_baseline", "optimized_metahuman", "shared_athlete_rig"],
+      "bounds_scope": "all specified poses or the complete specified action range",
+      "margin_fraction_of_each_frame_dimension": 0.1,
+      "record_camera_matrix_per_case_and_view": true,
+      "missing_candidate_policy": "block_complete_comparison"
+    },
+    "lighting_profiles": [
+      {"id": "neutral_technical", "definition": null, "status": "unavailable"},
+      {"id": "shipping_baseline", "definition": null, "status": "unavailable"}
+    ],
+    "lighting_policy": "Freeze lights, exposure, background and post-processing for all candidates within each profile"
+  },
+  "camera_views": [
+    {"id": "body_front", "frame": "neutral_actor_local", "target_region": "full_body", "azimuth_deg": 0.0, "elevation_deg": 0.0, "vertical_fov_deg": 35.0},
+    {"id": "body_right", "frame": "neutral_actor_local", "target_region": "full_body", "azimuth_deg": 90.0, "elevation_deg": 0.0, "vertical_fov_deg": 35.0},
+    {"id": "body_rear", "frame": "neutral_actor_local", "target_region": "full_body", "azimuth_deg": 180.0, "elevation_deg": 0.0, "vertical_fov_deg": 35.0},
+    {"id": "body_threequarter", "frame": "neutral_actor_local", "target_region": "full_body", "azimuth_deg": 45.0, "elevation_deg": 0.0, "vertical_fov_deg": 35.0},
+    {"id": "shoulder_front", "frame": "neutral_actor_local", "target_region": "head_shoulders_upper_chest", "azimuth_deg": 0.0, "elevation_deg": 0.0, "vertical_fov_deg": 35.0},
+    {"id": "shoulder_rear", "frame": "neutral_actor_local", "target_region": "head_shoulders_upper_chest", "azimuth_deg": 180.0, "elevation_deg": 0.0, "vertical_fov_deg": 35.0},
+    {"id": "action_side", "frame": "neutral_actor_local", "target_region": "actor_support_foot_and_ball_action_envelope", "azimuth_deg": 90.0, "elevation_deg": 5.0, "vertical_fov_deg": 40.0},
+    {"id": "tactical_wide", "frame": "fixture_world", "target_region": "all_actors_and_ball_motion_envelope", "azimuth_deg": 45.0, "elevation_deg": 55.0, "vertical_fov_deg": 40.0}
+  ],
+  "pose_definitions": [
+    {"id": "shoulder_abduction_90", "status": "unavailable", "source_motion_id": null, "authored_pose_binding": null, "authoring_requirement": "Both arms abducted to a 90-degree review pose with reviewed scapular/clavicle behaviour"},
+    {"id": "overhead_reach", "status": "unavailable", "source_motion_id": null, "authored_pose_binding": null, "authoring_requirement": "Reviewed overhead reach without forced shoulder dislocation or arbitrary bone rotations"},
+    {"id": "cross_body_reach", "status": "unavailable", "source_motion_id": null, "authored_pose_binding": null, "authoring_requirement": "Reviewed arm reach across the upper torso, repeated on each side"},
+    {"id": "shoulder_extension", "status": "unavailable", "source_motion_id": null, "authored_pose_binding": null, "authoring_requirement": "Reviewed arm extension behind the torso, repeated on each side"},
+    {"id": "deep_hip_flexion", "status": "unavailable", "source_motion_id": null, "authored_pose_binding": null, "authoring_requirement": "Reviewed deep hip and knee flexion with balance and foot support"}
+  ],
+  "review_cases": [
+    {"id": "bind_pose_body", "kind": "mesh_bind_pose", "source_motion_id": null, "pose_definition_id": null, "source_state": "baseline_bind_pose_present_candidates_unavailable", "views": ["body_front", "body_right", "body_rear", "body_threequarter"], "review": "unreviewed"},
+    {"id": "idle_body", "kind": "source_motion", "source_motion_id": "idle", "pose_definition_id": null, "sample_policy": "whole_source_clip", "views": ["body_front", "body_right", "body_rear", "body_threequarter"], "review": "unreviewed"},
+    {"id": "pass_receive_pair", "kind": "source_fixture", "fixture_source_ref": "pass_fixture", "duration_seconds": 3.7925, "views": ["tactical_wide", "action_side", "body_threequarter"], "per_actor_views": ["A", "B"], "review": "unreviewed", "known_response_gap": "Receiving cushioning and settled-control timing are unavailable"},
+    {"id": "shoulder_abduction", "kind": "authored_pose", "source_motion_id": null, "pose_definition_id": "shoulder_abduction_90", "views": ["shoulder_front", "shoulder_rear", "body_right"], "review": "unreviewed"},
+    {"id": "overhead", "kind": "authored_pose", "source_motion_id": null, "pose_definition_id": "overhead_reach", "views": ["body_front", "body_right", "body_rear"], "review": "unreviewed"},
+    {"id": "cross_body", "kind": "authored_pose", "source_motion_id": null, "pose_definition_id": "cross_body_reach", "views": ["shoulder_front", "shoulder_rear", "body_right"], "review": "unreviewed"},
+    {"id": "extension", "kind": "authored_pose", "source_motion_id": null, "pose_definition_id": "shoulder_extension", "views": ["body_front", "body_right", "body_rear"], "review": "unreviewed"},
+    {"id": "hip_flexion", "kind": "authored_pose", "source_motion_id": null, "pose_definition_id": "deep_hip_flexion", "views": ["body_front", "body_right", "body_rear"], "review": "unreviewed"},
+    {"id": "sprint_motion", "kind": "source_motion", "source_motion_id": "sprint", "pose_definition_id": null, "sample_policy": "whole_source_clip", "views": ["body_front", "body_right", "body_rear"], "review": "unreviewed"},
+    {"id": "left_90_turn", "kind": "source_motion", "source_motion_id": "jogL90", "pose_definition_id": null, "sample_policy": "whole_source_clip", "views": ["body_front", "body_right", "body_rear"], "review": "unreviewed"},
+    {"id": "right_90_turn", "kind": "source_motion", "source_motion_id": "jogR90", "pose_definition_id": null, "sample_policy": "whole_source_clip", "views": ["body_front", "body_right", "body_rear"], "review": "unreviewed"},
+    {"id": "left_180_pivot", "kind": "source_motion", "source_motion_id": "pivotL180", "pose_definition_id": null, "sample_policy": "whole_source_clip", "views": ["body_front", "body_right", "body_rear"], "review": "unreviewed"},
+    {"id": "right_180_pivot", "kind": "source_motion", "source_motion_id": "pivotR180", "pose_definition_id": null, "sample_policy": "whole_source_clip", "views": ["body_front", "body_right", "body_rear"], "review": "unreviewed"}
+  ],
+  "sampling": {
+    "evaluation_hz": 60,
+    "playback_rates": [1.0, 0.25],
+    "include_exact_event_times": true,
+    "contact_neighbour_offsets_seconds": [-0.016666666666666666, 0.0, 0.016666666666666666],
+    "out_of_range_neighbour_policy": "omit_and_report",
+    "event_times_seconds": [1.39262125, 2.43762125],
+    "event_time_source_ref": "pass_fixture",
+    "dense_sampling_policy": "Only to resolve a recorded defect"
+  },
+  "calibration_requirements": {
+    "status": "unmeasured",
+    "candidate_specific": true,
+    "surface_names": ["right_boot_strike", "right_boot_receive", "left_boot_strike", "left_boot_receive", "right_sole_support", "left_sole_support"],
+    "required_fields": ["id", "bone_name", "local_offset_cm", "local_normal", "mesh_source_sha256", "method"],
+    "native_evaluation_kind": "unreal_evaluated_sequence",
+    "source_contact_contract_path": "Docs/CONTACTS.md",
+    "plant_interval_annotations": null,
+    "plant_interval_policy": "Annotate stationary support, pivot and heel-lift phases separately",
+    "baseline_calibration_reuse": false
+  },
+  "thresholds": {
+    "status": "proposed_product_review_limits",
+    "industry_standard": false,
+    "contact_surface_gap_cm": 1.5,
+    "contact_time_tolerance_seconds": 0.008333333333333333,
+    "contact_time_basis_hz": 60,
+    "surface_normal_must_face_ball": true,
+    "stationary_plant_horizontal_excursion_cm": 2.0,
+    "stationary_plant_plane_distance_cm": 1.0,
+    "root_mapping_boundary_step_cm": 0.1,
+    "root_step_scope": "Section boundary discontinuity, not per-frame natural displacement"
+  },
+  "mandatory_gates": [
+    {"id": "asset_identity", "status": "blocked", "reason": "Production candidate sources, licences and bindings are unavailable"},
+    {"id": "body_and_kit", "status": "unreviewed", "reason": "No production candidate has been rendered"},
+    {"id": "deformation", "status": "blocked", "reason": "Candidate retargets and authored pose definitions are unavailable"},
+    {"id": "contact_and_motion", "status": "blocked", "reason": "No calibrated candidate surfaces, native traces or accepted cushioning"},
+    {"id": "product_view", "status": "unreviewed", "reason": "Matched native cameras and device viewport are unavailable"},
+    {"id": "device", "status": "blocked", "reason": "Engine execution, host integration and device measurements are unavailable"}
+  ],
+  "device_requirements": {
+    "proposed_sustained_fps": 30,
+    "proposed_test_duration_minutes": 10,
+    "minimum_device": null,
+    "minimum_os": null,
+    "viewport_pixels": null,
+    "host_baseline_memory_bytes": null,
+    "total_memory_ceiling_bytes": null,
+    "actual_measurements": null,
+    "requires_sp2_delivery_evidence": true
+  },
+  "builder_policy": {
+    "unknown_schema": "reject",
+    "verify_source_hashes": true,
+    "missing_candidate": "block_complete_comparison",
+    "missing_pose_definition": "block_affected_case",
+    "baseline_only_mode_requires_explicit_request": true,
+    "baseline_only_result_label": "baseline_diagnostic_only",
+    "automatic_acceptance": false,
+    "result_required_fields": ["actual_engine_version", "actual_engine_build_id", "source_hashes", "candidate_binding_hashes", "camera_matrices", "lighting_definitions", "evaluated_times", "lod_settings", "viewport_pixels", "calibration_ids", "gate_results", "reviewer_decisions"],
+    "synthetic_test_data_is_native_evidence": false
+  }
+}

@@ -1,0 +1,107 @@
+name: DigitalOcean Droplet lifetime watchdog
+
+# Fresh mode must be running outside the VM before creation. Explicit recovery
+# instead verifies one supplied existing ID/time without resetting its lifetime.
+# Readiness only enables execution. Inspect live binding/cleanup evidence.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: squadpad-droplet-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watch-lifetime:
+    name: Supervise one approved Droplet independently
+    if: github.repository == 'robobeirne/squadpaddrills' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    steps:
+      - name: Require explicit watchdog readiness before secret access
+        env:
+          SQUADPAD_DO_WATCHDOG_ENABLED: ${{ vars.SQUADPAD_DO_WATCHDOG_ENABLED }}
+        run: |
+          python3 -B - <<'PY'
+          import os
+          import sys
+          if os.environ.get("SQUADPAD_DO_WATCHDOG_ENABLED") != "true":
+              sys.exit("The Droplet watchdog is disabled. Prepare its restricted cleanup token and independent controller before enabling it. Readiness does not prove live arming.")
+          PY
+
+      - name: Check out the exact reviewed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          lfs: false
+          submodules: false
+
+      - name: Set up the controller's Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Supervise the Droplet using the selected binding mode
+        if: success() && vars.SQUADPAD_DO_WATCHDOG_ENABLED == 'true'
+        env:
+          SQUADPAD_DO_WATCHDOG_CONFIG: ${{ secrets.SQUADPAD_DO_WATCHDOG_CONFIG }}
+          SQUADPAD_DO_TOKEN: ${{ secrets.SQUADPAD_DO_CLEANUP_TOKEN }}
+        shell: bash
+        run: |
+          umask 077
+          SQUADPAD_RECEIPT_DIR="$(mktemp -d "$RUNNER_TEMP/squadpad-do-watchdog.XXXXXXXX")"
+          SQUADPAD_WATCHDOG_RECEIPT="$SQUADPAD_RECEIPT_DIR/receipt.json"
+          printf 'SQUADPAD_WATCHDOG_RECEIPT=%s\n' "$SQUADPAD_WATCHDOG_RECEIPT" >> "$GITHUB_ENV"
+          python3 -B Tools/Cloud/droplet_watchdog.py \
+            --config-from-env \
+            --receipt "$SQUADPAD_WATCHDOG_RECEIPT" \
+            --watch
+
+      - name: Summarize observed cleanup without a billing-cap claim
+        if: always()
+        run: |
+          python3 -B - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, "Tools/Cloud")
+          try:
+              from droplet_watchdog import public_receipt
+          except ImportError:
+              public_receipt = None
+
+          lines = ["## Droplet lifetime watchdog", ""]
+          report = None
+          path_value = os.environ.get("SQUADPAD_WATCHDOG_RECEIPT")
+          if path_value:
+              try:
+                  candidate = json.loads(Path(path_value).read_text(encoding="utf-8"))
+                  if isinstance(candidate, dict) and candidate.get("schema") == "squadpad.droplet-watchdog.v1":
+                      report = candidate
+              except (OSError, ValueError):
+                  pass
+          if report is None or public_receipt is None:
+              lines.extend(["No valid controller receipt was produced. Arming and cleanup are unverified.", ""])
+          else:
+              clean = public_receipt(report)
+              lines.extend(["```json", json.dumps(clean, indent=2), "```", ""])
+              if report.get("manual_deletion_required") is True:
+                  lines.extend(["The verified Droplet has passed its lifetime deadline. Delete it through the provider console immediately.", ""])
+          lines.extend([
+              "The readiness variable enables this workflow. It does not establish live arming.",
+              "Fresh mode requires a live armed status before creation, followed by bound status with identity_verified=true.",
+              "Existing-resource recovery requires an exact verified ID/time and preserves deadlines measured from provider creation. It never claims pre-creation arming.",
+              "Only deleted_verified with deletion_before_deadline=true records observed absence within the configured window.",
+              "Cancellation, controller timeout or provider failure can prevent cleanup and this summary.",
+              "This controller creates no resources and does not guarantee a billing cap or cover account-level extras.",
+              "Public output contains only allowlisted status, boolean evidence and counters. Full receipts remain in private temporary runner files; no artifacts are uploaded.",
+          ])
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
+              stream.write("\n".join(lines) + "\n")
+          PY

@@ -1,0 +1,378 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "squadpad.playback.v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "units": {
+      "const": {
+        "distance": "centimetres",
+        "time": "seconds",
+        "angle": "degrees"
+      }
+    },
+    "axes": {
+      "const": "unreal-z-up-x-forward"
+    },
+    "root_ownership": {
+      "const": "actor_tracks_only"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "motions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/motion"
+      },
+      "minItems": 1
+    },
+    "actors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/actor"
+      },
+      "minItems": 1
+    },
+    "balls": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ball"
+      },
+      "minItems": 1
+    },
+    "possession": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/possession"
+      },
+      "minItems": 1
+    },
+    "contacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/contact"
+      },
+      "minItems": 0
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "evidence": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "units",
+    "axes",
+    "root_ownership",
+    "duration_seconds",
+    "motions",
+    "actors",
+    "balls",
+    "possession",
+    "contacts"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:squadpad:playback:v1",
+  "title": "SquadPad SP1 portable playback",
+  "description": "Shape only. evaluate_playback.validate_playback also enforces finite doubles, unique IDs, sorted full-duration tracks, compatible clocks, action membership and possession/contact agreement. This data does not certify visual quality.",
+  "$defs": {
+    "motion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "duration_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "duration_seconds"
+      ]
+    },
+    "position_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "time_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "position_cm": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "time_seconds",
+        "position_cm"
+      ]
+    },
+    "transform_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "time_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "position_cm": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "yaw_degrees": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "time_seconds",
+        "position_cm",
+        "yaw_degrees"
+      ]
+    },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "source_motion_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "start_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "source_start_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "play_rate": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "loop": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "source_motion_id",
+        "start_seconds",
+        "end_seconds",
+        "source_start_seconds",
+        "play_rate",
+        "loop"
+      ]
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "appearance_slot": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "transform_keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/transform_key"
+          },
+          "minItems": 2
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/section"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "id",
+        "appearance_slot",
+        "transform_keys",
+        "sections"
+      ]
+    },
+    "ball": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "radius_cm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "position_keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/position_key"
+          },
+          "minItems": 2
+        }
+      },
+      "required": [
+        "id",
+        "radius_cm",
+        "position_keys"
+      ]
+    },
+    "possession": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "time_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "ball_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "state": {
+          "enum": [
+            "owned",
+            "in_transit"
+          ]
+        },
+        "owner_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "from_actor_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "to_actor_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "time_seconds",
+        "ball_id",
+        "state",
+        "owner_id",
+        "from_actor_id",
+        "to_actor_id"
+      ]
+    },
+    "contact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "kind": {
+          "enum": [
+            "kick",
+            "receive"
+          ]
+        },
+        "time_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "actor_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "ball_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "action_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "source_motion_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "source_contact_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "limb": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "calibration_status": {
+          "const": "unmeasured"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "time_seconds",
+        "actor_id",
+        "ball_id",
+        "action_id",
+        "source_motion_id",
+        "source_contact_seconds",
+        "limb",
+        "calibration_status"
+      ]
+    }
+  }
+}

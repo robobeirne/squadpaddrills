@@ -1,0 +1,268 @@
+PUBLIC COPY OF THE ORIGINAL DATED PLAN
+
+The revision 5 plan below was written on 20 October 2026 and is retained as the
+original implementation proposal. Its baseline, permissions and future-tense
+statements describe that point in the work. The later public GitHub handoff was
+authorized separately. Current implementation boundaries are documented in
+Docs/PLAYBACK_CONTRACT.md, Docs/RUNTIME_MODULE.md and Docs/RUNTIME_PROBE.md.
+
+References below to preserved assets, previews, reports, history and the research
+brief refer to the original offline package, not files included in this public
+checkout. Docs/ASSET_SETUP.md explains which assets must be restored for native
+work. Portable code verification is available now. Unreal execution, replacement
+athlete acceptance and device delivery remain separate pending gates.
+
+ORIGINAL PLAN FOLLOWS
+
+SQUADPAD FOOTBALL 3D
+Implementation plan, revision 5
+20 October 2026
+
+1. OUTCOME AND DECISION
+
+Build a convincing, interactive football drill viewer using Unreal for presentation and character animation. Keep the existing Swift application and coaching choreography as the product foundation. Establish native delivery before converting the full drill library.
+
+The production athlete will be selected through a controlled comparison. The current athlete A becomes a baseline reference. Further local repairs to its shirt are outside the main development path. Preserve the original captures, root traces, source clocks and export evidence.
+
+Recommended technical direction: a small portable C++ playback core, an Unreal runtime adapter, Animation Blueprints and Control Rig for presentation, and Python for asset preparation in the editor. Keep the choreography clock authoritative. Use authored or analytically evaluated ball movement where the coach expects a repeatable outcome. Use physics only through an explicit trajectory or contact policy.
+
+This plan authorizes cloud-local implementation under the user's instruction to plan and start. Mac access stays paused. No purchase, paid compute, external publication or production deployment forms part of the first increment. The builder owns implementation, conversion, evaluation and documentation. Rob reviews visual quality and product tradeoffs, with no requirement to write scripts or construct scenes.
+
+The research basis is Football in Unreal: Evidence before a migration decision, dated 20 October 2026. The plan below turns those findings into decisions and acceptance gates. Proposed numerical thresholds are product choices, not industry standards.
+
+2. LAUNCH SCOPE
+
+The first accepted result is one complete pass and reception with two convincing athletes: preparation, planted side-foot strike, ball travel, receiving cushion and recovery. Playback supports pause, restart, speed adjustment and direct seeking. A coach should understand the technique at normal speed and inspect the contact at quarter speed.
+
+The next accepted result is the existing rondo payload, with every scheduled participant, ball transfer and movement preserved. The observed payload contains two 4v1 groups, ten actors and two balls. A five-player group is an explicitly scoped intermediate, not the complete drill. Subsequent reference drills cover a passing combination, a directional receive/turn, a dribble/finish and a keeper action. Resolve their real IDs from the authoritative drill catalogue during integration. Do not invent catalogue entries or portray a reconstructed source snapshot as current repository bytes.
+
+The initial product supports the tactical wide view and a closer action view. Close-up anatomy is an asset acceptance test. Cinematic player portraits, stadium crowds, famous-player likenesses, online football competition and unrestricted match AI are outside this launch scope.
+
+Test workloads progress through an empty host, one athlete, two athletes, one five-player group, eight active athletes, the complete ten-actor/two-ball rondo and sixteen active athletes. Add twenty-two only if an accepted launch drill requires full 11v11. Existing browser playback stays available during native development. Do not silently substitute rendered video for the interactive viewer.
+
+3. CURRENT BASELINE
+
+Revision 4 contains preserved source GLBs and captured motion, a derived shoulder correction, Blender FBX exports, separate root traces, one observed rondo pass fixture and an editor import/scene bootstrap. The fixture lasts 3.7925 seconds. Kick time is 1.39262125 seconds. Reception is 2.43762125 seconds. Ball transfer remains 1.045 seconds.
+
+The existing actor-root planner applies horizontal displacement once. Contact checks distinguish metadata consistency from measured boot geometry. Existing numerical tests do not establish visual quality.
+
+Known gaps: incomplete covered torso geometry, weak kit and surface quality, abrupt idle/action transitions, no baked support-foot lock, provisional ball centres, no receiving cushion, no accepted replacement athlete and no general runtime playback controller. Unreal has not executed in this workspace. Native assets, Swift embedding and iPhone performance remain unverified.
+
+This cloud environment provides Python and a C++ compiler. It has no available Unreal Editor or Apple build toolchain. Cloud work will produce a compiler-tested playback foundation and preparation tools. Native acceptance requires a later authorized Unreal/Apple environment. A desktop compiler result must never be reported as an Unreal build.
+
+Earlier architecture documents selected athlete A followed by B-D. This revision supersedes that production-asset decision. Earlier reviews remain dated evidence of the original conversion.
+
+4. ARCHITECTURE
+
+Four boundaries keep the system maintainable.
+
+Coaching intent: Swift remains responsible for drill identity, actors, roles, routes, action order, ownership and intended event times. Export a versioned source payload. Preserve source provenance and report unsupported actions explicitly.
+
+Presentation compilation: convert intent into named action occurrences, root tracks, clip phases, contacts, ball regimes and possession intervals. Keep source motion IDs separate from retargeted animation IDs. Produce portable data without machine-specific filesystem paths.
+
+Playback core: evaluate the state associated with an absolute drill time. Return actor transforms, clip sample requests, ball state and possession. The core does not choose tactics, load meshes or manipulate an Unreal world. Stateful controls advance the time only. Seeking and reverse sampling use the same evaluator.
+
+Unreal presentation: load the validated asset binding, apply world transforms, sample animation, execute bounded IK/warping, update the ball and render. The adapter owns Unreal objects and lifecycle. Asset preparation uses editor Python. Shipped runtime logic must not depend on Python. [1]
+
+Keep the existing UE5.8 API target for the initial probe. Record the actual editor version and build identifier before import. Freeze that exact engine build after the native proof. Package upgrades require a specific compatibility reason and a narrow regression check.
+
+The compiled presentation contract uses centimetres, seconds, degrees and the existing Unreal-oriented Z-up/X-forward world basis. The Swift source retains diagram metres. Conversion happens once during compilation, with explicit basis metadata. No implicit axis swap, actor rotation patch or duplicated root extraction is permitted.
+
+5. CLOCK, CONTACT AND OWNERSHIP RULES
+
+Each action occurrence has its own ID, actor, source motion, bound animation, source interval, timeline interval, play rate and intended contacts. Two passes by the same actor are separate occurrences. Root composition must support their transition without snapping between contact-relative origins.
+
+The timeline owns event meaning. Animation notifications assist authoring and presentation. They do not determine possession or completion when the coach seeks across an action. Preserve fractional contact times. Display frame rate and source sample rate are separate properties. [2]
+
+Evaluate state directly at time t. Clamp a finite requested time to the supported interval. Reject non-finite input. Section intervals are half-open, with the final endpoint handled explicitly. A state query has no side effects. Source animation time derives from the selected occurrence and its play rate, with documented loop or end-hold behaviour.
+
+Pause keeps the playhead unchanged. Seek updates state without emitting contact events. Restart sets time to zero and pauses. Forward advance emits each crossed event once over the interval (previous time, new time], ordered by time and stable ID. Rewinding through seek does not fire past events. A later forward replay emits events for the new traversal. Begin with positive rates and clamped playback. Add automatic looping through an explicit later contract, rather than an implicit end reset.
+
+Separate ball carrier from team possession. During a pass the carrier is empty, the intended sender and receiver remain known, and team ownership persists only when the source defines the team. The current fixture has no authoritative team data, so the first contract records an unknown team.
+
+An asset binding maps actor appearance slots to a mesh, skeleton, retargeted clips and calibrated contact surfaces. Changing the athlete requires compatible retargeted clips and new calibration. Copying an old mesh-specific calibration to a replacement must fail validation.
+
+6. BALL AND MOTION DESIGN
+
+Use named ball regimes: controlled contact, free travel and settled control. The first runtime increment preserves the existing hold/linear/hold ground path as baseline evidence. It does not claim improved ball realism.
+
+For the accepted pass slice, author release and arrival states together with the strike and receiving performance. Receiving needs separate arrival, cushioning and settled-control times. Preserve the existing transfer interval unless source intent explicitly changes. Do not place the ball beside a foot and declare contact complete.
+
+Ground motion includes plausible deceleration and rolling rotation. A strike or bounce permits a velocity change at a named event. Smooth carries and cushioning require appropriate continuity. Lofted passes and shots use gravity-based trajectories or recorded physical results constrained to the intended action. Spin, bounce and drag are added where their visible effect matters. Keep all regimes seekable.
+
+Retarget source capture before deciding whether a clip needs replacement. Calibrate the support foot and intended boot/glove region on the selected athlete. Correct pelvis and root placement within bounded reach. If a clip cannot reach without obvious distortion, select or author a more suitable action.
+
+Use Motion Matching for locomotion where coverage and responsiveness justify the added system. Use explicit action selection and contact clocks for prescribed passes, receives and shots. Motion Matching selects from supplied data. It does not supply missing football technique. Motion Warping adjusts supported windows and requires bounded targets. [3,4]
+
+7. ATHLETE SELECTION
+
+Compare two production candidates: an optimized MetaHuman with fitted football clothing, and a game-ready athlete on a controlled shared rig. The second route includes licensed character assets or a Character Creator workflow. Athlete A supplies the baseline comparison. Start a bespoke body pipeline only if both candidates fail a documented requirement.
+
+Use identical source performances, event times, pitch, lighting, camera framing and render resolution. Compare proposed shipping settings. Do not compare a cinematic candidate with a heavily reduced alternative. Epic's MetaHuman assembly and mobile guidance inform the test, while actual device results decide acceptance. [5,6]
+
+Each candidate needs a complete source body for garment fitting, even if the shipped mesh removes hidden surfaces. Inspect front, side, rear and three-quarter views. Review raised arms, cross-body reach, shoulder extension, deep hip flexion, planted strike, receiving cushion, turn and sprint arm swing.
+
+Reject visible shoulder collapse, disconnected sleeves, floating collars, severe cloth compression, exposed skin through the kit and abrupt corrective-shape changes. Review neck continuity, hair silhouette, crest/number edges and boot form. Review LOD changes during the same movements.
+
+Record skeleton, rest pose, unit/basis conventions, material count, bones, influences, texture sizes, mesh detail, hair representation and corrective dependencies. Record licence terms and asset source. A small compressed file does not establish low working memory.
+
+Select through mandatory gates for body/kit, deformation, contact and device performance. A weighted beauty score must not hide a failed gate. Rob receives matched stills plus the same short movement sequence and a recommendation explaining remaining tradeoffs.
+
+8. VISUAL AND TECHNIQUE ACCEPTANCE
+
+Retain the current proposed boot-ball surface tolerance of 1.5 cm and time tolerance of half a 60 Hz display frame. Require the intended surface normal to face the ball. Bind evidence to actor, ball, limb, action occurrence, source mesh and calibration. Capture evaluated native poses. The existing metadata checker remains useful, with visual acceptance recorded separately.
+
+Extend measurement through the action. Proposed support-foot review limits are 2 cm horizontal excursion during an intended stationary plant and 1 cm from the pitch plane for the calibrated sole patch. Toe pivots and heel lifts need separate phase definitions. Measure the final retargeted, blended and placed animation.
+
+At section boundaries, reject a root-position step above the proposed 1 mm mapping tolerance. This measures discontinuity, not natural motion speed. Inspect pelvis, shoulders and arms at normal speed. Establish any additional angular limits from the actual reference performance.
+
+Review exact contact and neighbouring frames. Reject ball penetration, wrong-foot contact, impossible balance, an instantaneous receiving freeze and prolonged ball attachment. Review at normal and quarter speed, with direct seeks into each contact interval.
+
+Use a short native evaluation at 60 Hz plus exact event times. Add denser sampling only around an unresolved defect. Separate numerical evidence, visual review and coaching-technique review. None substitutes for the others. Named skills, tackles and keeper actions require their own review fixtures.
+
+9. DELIVERY PROOF AND RESOURCE BUDGET
+
+Run delivery work before full-library conversion. First establish editor import/save/reopen and native sequence playback. Next package a standalone iOS probe. Then prove the same content inside a minimal Swift host. A standalone success does not establish embedding. Epic currently labels the iOS framework-build option experimental. [7]
+
+The host probe covers create/open, resize/orientation, pause/resume, seeking, repeated dismissal/re-entry, background/foreground, interruptions, error recovery and memory pressure. Define thread ownership and message acknowledgements. Commands include load, play, pause, seek, rate, restart and unload or release-view. Responses include ready, position, completed and structured error. Keep one authoritative clock.
+
+Measure the existing Swift host before assigning a total memory ceiling. Measure the renderer's incremental resident memory, peak allocation and stable retained engine footprint. Run repeated view cycles and distinguish a stable warm engine from ongoing growth. The final ceiling must fit the chosen minimum device, with host headroom.
+
+Initial proposed visual target: sustained 30 fps for the accepted launch workload over ten minutes at the chosen phone resolution. Record CPU/GPU work and frame-time percentiles, stalls, thermal state and degradation over time. Sixty fps is an optional higher tier, not a launch prerequisite. Record cold/warm opening time, package/download size and first-use asset cost.
+
+Use the normal mobile rendering path for the baseline. Mobile features differ from desktop, and Epic's iOS desktop renderer is Beta with a shipping caveat. Do not make Lumen, Nanite or desktop hair quality prerequisites for a coaching view. [8,9]
+
+Resolve the minimum phone and OS from the actual app support policy at the delivery gate. Test a representative lower-tier supported device and the available primary phone. Do not infer the support floor from Rob's personal device.
+
+If embedding fails, produce a concrete result with failure, resource evidence and alternatives. Preserve the current interactive renderer while evaluating revised integration or Unreal-generated content for another runtime. Any change to free-camera interaction or app structure needs a product decision after the prototype exists.
+
+10. WORK PACKAGES AND DEPENDENCIES
+
+SP0 - Baseline and decision record
+Inputs: revision 4 package and completed research.
+Build: source/hash inventory, superseding architecture decision, current evidence map and this plan. Preserve original fixture and reports.
+Accept: unchanged source hashes and clear separation of baseline, current implementation and accepted visual work.
+Dependency: none. First increment includes this work.
+
+SP1 - Portable playback foundation
+Inputs: validated first-pass build plan and source clocks.
+Build: versioned presentation and binding contracts, compiler, reference evaluator, native C++ core, playback controls and event semantics. Add a small inspection CLI and reference samples.
+Accept: direct seek equals sequential sampling, pause holds, rate changes time progression only, possession changes at exact boundaries, duplicate/malformed input fails, root motion applies once and portable output contains no workspace paths. Compile and run the C++ core. Compare native results against the same source fixture and independent edge cases.
+Dependency: SP0. First increment starts here after plan completion.
+
+SP2 - Unreal and iOS delivery proof
+Inputs: SP1 contract, existing baseline assets, authorized engine/Apple environment.
+Build: native runtime adapter, cooked sample map, minimal packaged viewer and Swift host prototype. Save/reopen asset readback. Use actual engine version receipts.
+Accept: correct basis/scale, source times, arbitrary seeks, native playback and host lifecycle. Record device measurements and integration decision.
+Dependency: SP1. Required before broad asset conversion. A compiler-only result does not close SP2.
+
+SP3 - Production athlete comparison
+Inputs: audition specification, available licensed candidates and SP2 rendering route.
+Build: two controlled candidate imports, fitted kit, hair/material setup, retargeted pass/receive and surface calibration. Prepare matched cameras and deformation poses.
+Accept: every mandatory asset gate, matched motion review and measured target-device budget. Record selected asset, licence, rig and rejected alternatives.
+Dependency: comparison preparation runs with SP1. Native audition and selection depend on SP2. Purchases follow a concrete candidate and cost review.
+
+SP4 - Accepted pass/receive slice
+Inputs: SP2 runtime and SP3 athlete.
+Build: action blends, support-foot treatment, calibrated strike, ball roll/rotation, receiving cushion and recovery. Preserve the source transfer clock. Add normal/slow review controls.
+Accept: two-athlete sequence passes contact, plant, transition, body/kit and technique review in the native viewer. Pause/seek returns the same result.
+Dependency: SP2 and SP3. This is the first visual-quality milestone. A replacement head alone does not close SP4.
+
+SP5 - Action library
+Inputs: SP4 authoring pattern and actual drill action inventory.
+Build in groups: locomotion/start/stop; 45/90/180-degree turns; carrying and dribbling; moving receives and passes; receive across body/pass into space; lofted pass/shot; named turns; defending/tackles; keeper set/catch/parry/dive.
+Accept: each action has source provenance, entry/exit conditions, supported feet/speeds, contact intervals, root policy and a reviewed fixture. Mirrored motion receives technique review. Missing coverage fails explicitly.
+Dependency: SP4 for the common pattern. Author only actions required by the accepted drill set before extending the catalogue.
+
+SP6 - Full-drill compilation
+Inputs: authoritative source exports, SP1 contract and accepted SP5 actions.
+Build: multiple occurrences per actor, continuous root composition, simultaneous actions, waiting/support movement, multiple balls where present and possession continuity. Begin with the real 4v1 rondo.
+Accept: all source actors/events represented, source timing preserved, no implicit ball teleport, exact final state and no hidden unsupported action substitution. Compile and evaluate every selected drill before visual review.
+Dependency: SP4 plus the specific required SP5 groups. The observed snapshot is sufficient for local rehearsal, not a current source synchronization claim.
+
+SP7 - Product integration
+Inputs: accepted delivery path, SP4 slice and SP6 drill selection.
+Build: production Swift bridge, loading/error states, play/pause/seek/rate, camera presets, actor labels, drill selection and scene replacement. Preserve app navigation and existing coaching meaning. Use a feature flag for the native viewer.
+Accept: ordinary app entry/exit, repeated drill changes, readable controls on phone/tablet, background restoration and safe fallback. Measure the combined host workload.
+Dependency: SP2 establishes feasibility. SP4/SP6 provide accepted content. No full Swift application rewrite is assumed.
+
+SP8 - Performance, art and field review
+Inputs: integrated viewer and launch drill set.
+Build: measured LOD/material/texture tuning, animation update budget, pitch/lighting polish, camera framing and final legibility adjustments. Optimize measured costs, preserving action timing and contact quality.
+Accept: sustained device target, stable memory cycles, no missing assets, acceptable opening time and readable technique. Run coach review using the intended lesson, including a representative sixteen-player drill if in scope.
+Dependency: SP7. Repeat visual checks only for content affected by optimization.
+
+SP9 - Release and maintenance
+Inputs: SP8 evidence and product acceptance.
+Build: versioned asset bundle, source/licence manifest, reproducible build notes, release flag, failure reporting and rollback package. Keep compatible source schema readers or provide explicit migrations.
+Accept: candidate build, rollback rehearsal and explicit release approval. Existing production behaviour stays recoverable. A new engine version starts with the small probe before broad migration.
+Dependency: SP8. Publishing, merging and production activation are separate actions from the authorized local implementation.
+
+Critical dependency sequence: SP0, SP1, SP2, SP3 selection, SP4, required SP5/SP6 content, SP7, SP8, SP9. Candidate research, motion inventory and source-adapter preparation run in parallel where inputs permit. Do not replace these gates with a speculative calendar promise. Estimate remaining effort after the delivery and athlete probes establish their actual costs.
+
+11. VERIFICATION AND WORKLOAD DISCIPLINE
+
+Use distinct evidence classes: data/contract, portable native core, editor asset import, rendered movement, host lifecycle and physical device. Every report names its inputs, executable/runtime and scope. An unavailable gate stays pending.
+
+For SP1, run focused contract/controller/native parity tests plus the affected existing planner/export regressions. Preserve the recorded baseline instead of repeatedly rendering unchanged assets. Do not run a native test suite for documentation-only changes.
+
+For later changes, choose tests by risk. A calibration edit needs contact/plant checks on affected actions. An animation binding edit needs compatibility and action review. A renderer or engine change needs the small native/device probe. A full drill expansion needs intent/timing/ownership checks and selected visible playback.
+
+Stop optional testing when the relevant gate has enough evidence. Record remaining uncertainty directly. Keep one heavy editor/build/device worker per machine. Schedule expensive renders and native tests sequentially. Cloud-only work continues while Mac access is paused.
+
+12. FIRST IMPLEMENTATION INCREMENT
+
+Deliver a presentation contract compiled from the existing first pass, an explicit athlete-A baseline binding, Python validation/reference evaluation and a C++17 core compiled in this workspace. Preserve original source files, fixture, root descriptors and preview.
+
+The first core evaluates planar actor positions/yaw, selected clip and source time, ball position, possession and contact markers. Support pause, seek, restart, positive rate and bounded forward advance. Use shortest-path yaw interpolation with a documented 180-degree tie policy. Future nonplanar poses require a versioned extension or quaternion representation.
+
+Keep the first contract deliberately bounded: full-duration sorted tracks, non-overlapping action sections, hold/linear positional interpolation, named events and explicit possession transitions. Reject unsupported curve types, unknown references and invalid times. Do not invent blending, physical ball response, calibrated contacts or team ownership.
+
+The binding identifies the baseline mesh and rig-specific retargeted clips. Playback uses stable binding IDs rather than embedding import paths. Compiler evidence retains source and build hashes. A fixture marked unmeasured remains unmeasured after compilation.
+
+Acceptance includes exact kick/reception clocks, direct/random/reverse seek equivalence, 30/60 Hz stepping equivalence at a chosen time, repeated event traversal, pause/rate/end behaviour, malformed-input rejection and unchanged source hashes. Compare C++ samples with reference values without presenting synthetic edge cases as real athlete measurements.
+
+Prepare an athlete audition data file and review checklist during this increment. Candidate state begins unavailable or unreviewed. Review cameras and required poses are authoring requirements, not fake native observations.
+
+Expected visible outcome of this increment: a documented and tested playback foundation plus an actionable athlete comparison. No new athlete render or Unreal/iPhone execution is promised by this cloud step. SP2 and SP3 supply the first native and replacement-character evidence.
+
+13. HANDOFF AND DECISION OWNERSHIP
+
+The builder maintains the plan, task states, source package and evidence. Each continuation starts from the current status and completed receipts. Do not repeat accepted baseline tests without a changed dependency.
+
+Rob's decisions are limited to concrete choices: preferred accepted athlete presentation, any paid asset/compute proposal, a delivery alternative which changes interaction, and final release. Missing technical measurements are builder work, not implementation homework for Rob.
+
+The first later access request must name the exact native workload, expected resource use and stopping point. Do not resume remote access from a general instruction to continue cloud work. Complete the portable code and preparation first.
+
+14. SOURCE REGISTER
+
+[1] Epic, Python editor scripting. Python does not run as gameplay scripting in packaged runtime.
+https://dev.epicgames.com/documentation/en-us/unreal-engine/scripting-the-unreal-editor-using-python
+
+[2] Epic, Animation Notifies. Event behaviour needs an explicit playback contract.
+https://dev.epicgames.com/documentation/en-us/unreal-engine/animation-notifies-in-unreal-engine
+
+[3] Epic, Motion Matching. Database-driven pose selection.
+https://dev.epicgames.com/documentation/unreal-engine/motion-matching-in-unreal-engine
+
+[4] Epic, Motion Warping. Target correction within authored windows.
+https://dev.epicgames.com/documentation/en-us/unreal-engine/motion-warping-in-unreal-engine
+
+[5] Epic, MetaHuman assembly. Optimized character options.
+https://dev.epicgames.com/documentation/metahuman/assembly
+
+[6] Epic, MetaHuman platform and LOD specifications.
+https://dev.epicgames.com/documentation/en-us/metahuman/platform-support-and-lod-specifications-for-metahumans
+
+[7] Epic, iOS project settings. Framework build remains labelled Experimental in the reviewed documentation.
+https://dev.epicgames.com/documentation/en-us/unreal-engine/ios-settings-in-the-unreal-engine-project-settings
+
+[8] Epic, mobile rendering features.
+https://dev.epicgames.com/documentation/unreal-engine/rendering-features-reference
+
+[9] Epic, desktop renderer on mobile.
+https://dev.epicgames.com/documentation/unreal-engine/using-the-desktop-renderer-on-mobile-in-unreal-engine
+
+Local evidence: Docs/STATUS.md revision 4 record, Reports/shoulder-correction.md, Reports/animation-review.md, Docs/CONTACTS.md, Fixtures/first_pass.drill.json, Content/Python/squadpad_plan.py and the completed 20 October research brief.
+
+Source checks: 20 October 2026. Engineering thresholds and scope choices in this plan are proposals for SquadPad. The implementation status report records which proposals have been built and verified.

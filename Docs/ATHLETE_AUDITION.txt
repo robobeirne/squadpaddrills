@@ -1,0 +1,102 @@
+SQUADPAD ATHLETE AUDITION
+Specification revision 1, 20 October 2026
+
+Public checkout note
+
+This is the original audition specification with public setup guidance. The
+machine-readable specification preserves the original offline snapshot. Fields
+such as supplied_bytes_present and local_baseline_present describe that snapshot,
+not availability in a clean Git checkout. SourceInputs, DerivedInputs, SourceData
+and the original first_pass fixture are in the separate asset bundle. Restore
+them as described in Docs/ASSET_SETUP.md before attempting asset review. No
+production candidate or native comparison scene is included.
+
+Purpose
+
+Select a production athlete through the same football performance, body review and device workload. The comparison covers an optimized MetaHuman and a game-ready athlete on a controlled shared rig. Athlete A supplies the existing baseline. This specification implements SP3 preparation in IMPLEMENTATION_PLAN.txt. No candidate has been acquired, imported, rendered or selected.
+
+The machine-readable specification is Fixtures/Audition/athlete_audition.v1.json. Paths in that file are relative to the SquadPad3D package root. Source paths identify evidence retained in the original offline package. Null candidate bindings, licences, measurements and native assets mean unknown or unavailable. They are not placeholders for assumed successful results.
+
+Candidate roles
+
+optimized_metahuman: production candidate family. Requires a complete source body, fitted football kit, boots and a mobile hair representation. Actual character, source, licence record and shipping configuration are unavailable.
+
+shared_athlete_rig: production candidate family. Includes a licensed game-ready character or a Character Creator workflow with a controlled rig. Actual character, source, licence record and shipping configuration are unavailable.
+
+athlete_a_baseline: reference only. Uses the existing derived shoulder-corrected athlete and its exported idle, pass and receive animations. Its covered torso is incomplete. Its kit, transitions, foot locking and receiving response retain known defects. Prior local shoulder acceptance does not establish complete character quality.
+
+Controlled comparison
+
+Use the same source performance, fractional event times, pitch plane, ball radius, lighting profile, render resolution and review speed. Do not scale one athlete to hide a proportion difference. Record each candidate's true dimensions. Do not transfer baseline boot calibration to a replacement mesh.
+
+The proposed review canvas is 1280 by 720 pixels. This is an authoring comparison format, not a measured device result or required phone resolution. The actual target-device viewport belongs in the later native receipt.
+
+Prepare one camera matrix per review case and view. Fit the union of all candidate bounds once, then freeze the matrix for the comparison. Measure bounds at the specified pose or over the specified sequence. Add the declared framing margin. Preserve common world scale. Individual candidate auto-framing is prohibited. If a candidate is unavailable, complete comparison framing remains blocked.
+
+Use the actor's neutral Unreal-oriented frame for body views: X forward, Y right, Z up. Front camera azimuth is 0 degrees, right side 90 degrees, rear 180 degrees and three-quarter 45 degrees. Camera elevation is measured above the horizontal plane. Azimuth 0 places the camera in front of the athlete, looking towards the target. The JSON camera values are authoring requirements. No native camera has been created or measured.
+
+Body views frame the full body. Shoulder views frame the head, shoulders and upper chest. The binding must identify this framing region using actual candidate geometry. The tactical view frames both actors, the ball and their motion envelope. The action view frames the intended actor, supporting foot and ball through the action. Record the resulting matrices in the native receipt.
+
+Use a neutral technical-lighting profile and a proposed shipping-lighting profile. Their native definitions are currently unavailable. Once authored, freeze lighting, exposure, background and post-processing settings for every candidate. Do not use individual beauty lighting or camera changes to disguise a defect.
+
+Source coverage
+
+The supplied canonical index and binary include idle, pass, receive, sprint, jogL90, jogR90, pivotL180 and pivotR180. Only idle, pass and receive have baseline FBX exports in the existing package. Presence in the source index establishes available source data, not accepted football technique or candidate compatibility.
+
+The existing first_pass fixture supplies the two-player action clocks. Duration is 3.7925 seconds. Strike is 1.39262125 seconds. Reception is 2.43762125 seconds. Transfer duration is 1.045 seconds. The receiving clip begins at 1.86575125 seconds and uses the local contact time 0.57187 seconds.
+
+The fixture is a selected segment from an observed rondo snapshot. Source repository currentness has not been reverified. The audition does not claim a full-rondo result.
+
+The baseline's receiving ball holds at a provisional arrival position. A separate cushioning interval and settled-control time are unavailable. The receive clip is useful source movement. Its existence does not supply an accepted receiving-ball response.
+
+Required review cases
+
+Bind pose and idle: front, side, rear and three-quarter body views. Inspect true body proportions, sleeve fit, collar, neck, boots, hair silhouette and kit graphic boundaries.
+
+Pass and receive: the same two-player fixture at normal and quarter speed. Inspect exact events and neighbouring samples. Review approach, planted strike, follow-through, receiver preparation, initial contact and recovery. Missing cushion and abrupt baseline transitions stay visible in the record.
+
+Shoulder abduction, overhead reach, cross-body reach and shoulder extension: dedicated authored poses remain unavailable. The JSON records authoring requirements without inventing capture IDs. Review volume, seams, sleeves, exposed skin and corrective changes from front, side and rear.
+
+Deep hip flexion: dedicated authored pose remains unavailable. Review hips, shorts, upper legs and balance. The existing receiving contact also supplies a separate known performance sample, without substituting for the full deformation pose.
+
+Sprint, 90-degree turns and 180-degree pivots: source IDs exist in the canonical package. Candidate retargets and baseline FBX exports are unavailable for these cases. Review arm swing, shoulder motion, planted turns, pelvis response and LOD changes after native preparation.
+
+Do not use a mirrored clip as accepted opposite-foot technique without separate review. Do not invent a technical pose by labelling an unrelated animation frame. Unavailable pose definitions block the corresponding review group.
+
+Contact and plant calibration
+
+Each candidate needs its own right/left boot contact surfaces and supporting sole patches. Record an actual bone, local surface point, outward unit normal, source mesh hash, measurement method and calibration ID. Source timing and athlete geometry remain separate evidence.
+
+Reuse Docs/CONTACTS.md for strike and reception. Proposed contact gap is at most 1.5 cm. Proposed time tolerance is half a 60 Hz display frame, or 0.008333333333333333 seconds. Require the surface normal to face the ball. Evaluate the final native skeletal pose. An ankle centre, toe-joint centre or manually placed ball is insufficient evidence of surface contact.
+
+Proposed stationary support-foot limits are 2 cm horizontal excursion and 1 cm from the pitch plane for a calibrated sole patch. Annotate actual plant intervals first. Toe pivots and heel lift require their own phases. Do not apply a static-foot rule across a legitimate pivot.
+
+Proposed root mapping continuity tolerance is 1 mm at section boundaries. This checks a discontinuity between sections, not ordinary displacement between successive frames. Review limb, pelvis and torso changes visually as well.
+
+Sample the short native sequence at 60 Hz and at exact action times. Include one sample interval before and after each contact where the fixture supports the time. Render normal and quarter-speed review playback. Add denser sampling only to resolve a specific defect.
+
+Mandatory gates
+
+Asset identity: known source and licence record, complete fitting body, skeleton/rest pose, units, materials, corrective dependencies and candidate-specific binding.
+
+Body and kit: acceptable proportions, fitted kit, continuous neck and sleeve surfaces, readable graphics and suitable boots. No beauty score overrides a failed body or kit review.
+
+Deformation: required poses and actions completed. Reject visible shoulder collapse, severe cloth compression, skin protrusion, broken seams or abrupt corrective/LOD changes.
+
+Contact and motion: correct intended surfaces and limbs, calibrated plant intervals, accepted pass contact, receiving cushion, follow-through and transitions. Exact source clocks remain traceable.
+
+Product view: technique reads in the tactical and action views at the actual device resolution. Close-up anatomy is an asset review. Cinematic portrait parity is outside launch scope.
+
+Device: native import/save/reopen, cooked playback and a measured host/device workload. The initial plan proposes sustained 30 fps over ten minutes. Minimum device, phone resolution and total memory ceiling remain unresolved until SP2 measures the host and intended support policy.
+
+Every gate begins pending or blocked. No engine, device, scene, calibration, licence or visual acceptance is supplied by this specification.
+
+Scene-builder contract
+
+Read the schema and revision. Resolve all paths against the package root. Verify declared hashes. Reject unknown schema versions, missing required references, malformed numeric values and missing candidate bindings. Report unavailable cases by their IDs.
+
+A builder may prepare baseline-only diagnostics when explicitly requested. Such a run must state baseline_diagnostic_only and must not mark the two-candidate comparison complete. This specification does not contain a runnable scene builder.
+
+For a complete comparison, require both candidate bindings, both frozen lighting profiles, authored pose definitions, retargeted motion and surface calibration. Build the camera matrices from the shared framing contract. Record actual engine/build, fixture/source/binding hashes, evaluated times, cameras, lighting, LOD settings, viewport and review results. Keep synthetic test data separate from native evidence.
+
+A result closes SP3 only after every mandatory gate passes and Rob receives matched stills, the same short movement sequence and a recommendation with measured tradeoffs. These files prepare the audition. They do not close SP3.
