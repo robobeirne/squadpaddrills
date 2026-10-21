@@ -31,11 +31,16 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install the evidence encryption tool
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends age
+
       - name: Test published fixture contracts and playback controls
         run: python3 -B -m unittest Tests.test_playback -v
 
-      - name: Test native launchers and Droplet watchdog without an engine or network
-        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate Tests.test_droplet_watchdog Tests.test_inspect_remote_worker -v
+      - name: Test execution, bootstrap, cleanup and evidence controls without a worker
+        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate Tests.test_droplet_watchdog Tests.test_inspect_remote_worker Tests.test_bootstrap_remote_worker Tests.test_install_engine Tests.test_seal_native_evidence -v
 
       - name: Compile C++17 core and compare with Python reference
         run: python3 -B Tools/Playback/verify_native.py --report "$RUNNER_TEMP/runtime-core-validation.json"
@@ -53,7 +58,8 @@ jobs:
               "## Portable playback checks passed",
               "",
               "Python contract and control tests ran against the published first-pass fixture.",
-              "Synthetic launcher and watchdog tests check failure handling; they do not establish live Unreal or cloud cleanup success.",
+              "Synthetic launcher, bootstrap and watchdog tests check failure handling; they do not establish live Unreal or cloud cleanup success.",
+              "Evidence tests encrypt and decrypt synthetic files with age; no task credentials or native logs are used.",
               "",
               f"- C++17 core assertions: {report['unit_checks']}",
               f"- C++/Python comparisons: {report['native_reference_comparisons']}",
@@ -96,5 +102,10 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Verify launcher and watchdog behavior without a worker or cloud provider
-        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate Tests.test_droplet_watchdog Tests.test_inspect_remote_worker -v
+      - name: Install the evidence encryption tool
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends age
+
+      - name: Verify execution controls without a worker or cloud provider
+        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate Tests.test_droplet_watchdog Tests.test_inspect_remote_worker Tests.test_bootstrap_remote_worker Tests.test_install_engine Tests.test_seal_native_evidence -v

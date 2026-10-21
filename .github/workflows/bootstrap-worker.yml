@@ -1,0 +1,192 @@
+name: Prepare temporary Linux Unreal worker
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: squadpad-unreal-native
+  cancel-in-progress: false
+
+jobs:
+  bootstrap-worker:
+    name: Prepare the approved fresh worker and install the archive
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'robobeirne/squadpaddrills' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    # Remote stages enforce the earlier private lifecycle deadline as well.
+    # Leave runner time to seal partial evidence after a stage fails.
+    timeout-minutes: 150
+    steps:
+      - name: Initialize temporary bootstrap paths
+        run: |
+          python3 -B - <<'PY'
+          import os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"])
+          suffix = os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
+          sealed = root / ("squadpad-bootstrap-sealed-" + suffix)
+          sealed.mkdir(mode=0o700)
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
+              stream.write(f"SQUADPAD_BOOTSTRAP_OUTPUT={root / ('squadpad-bootstrap-output-' + suffix)}\n")
+              stream.write(f"SQUADPAD_BOOTSTRAP_KEY_DIR={root / ('squadpad-bootstrap-ssh-' + suffix)}\n")
+              stream.write(f"SQUADPAD_BOOTSTRAP_SEALED_OUTPUT={sealed}\n")
+          PY
+
+      - name: Check out the exact reviewed main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          lfs: false
+          submodules: false
+
+      - name: Set up the coordinator's Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Require the approved worker preparation setup
+        env:
+          SQUADPAD_BOOTSTRAP_ENABLED: ${{ vars.SQUADPAD_BOOTSTRAP_ENABLED }}
+        run: |
+          python3 -B - <<'PY'
+          import os
+          import sys
+          if os.environ.get("SQUADPAD_BOOTSTRAP_ENABLED") != "true":
+              sys.exit("Worker preparation is disabled. Configure the approved worker, private archive transfer and independent deletion first. See Docs/WORKER_BOOTSTRAP.md.")
+          PY
+
+      - name: Install evidence encryption from Ubuntu's package repository
+        timeout-minutes: 7
+        run: |
+          sudo -n timeout 180 apt-get -o Acquire::Retries=1 update -qq
+          sudo -n timeout 180 apt-get -o Dpkg::Use-Pty=0 install --no-install-recommends --yes age
+
+      - name: Prepare temporary SSH credentials
+        env:
+          SQUADPAD_SSH_KEY_CONTENT: ${{ secrets.SQUADPAD_REMOTE_SSH_KEY }}
+          SQUADPAD_KNOWN_HOSTS_CONTENT: ${{ secrets.SQUADPAD_REMOTE_SSH_KNOWN_HOSTS }}
+        run: |
+          python3 -B - <<'PY'
+          import os
+          from pathlib import Path
+          import sys
+          values = {
+              "identity": os.environ.get("SQUADPAD_SSH_KEY_CONTENT", ""),
+              "known_hosts": os.environ.get("SQUADPAD_KNOWN_HOSTS_CONTENT", ""),
+          }
+          if not all(0 < len(value.encode("utf-8")) <= 65536 for value in values.values()):
+              sys.exit("Bounded SSH identity and independently verified host-key secrets are required.")
+          try:
+              directory = Path(os.environ["SQUADPAD_BOOTSTRAP_KEY_DIR"])
+              directory.mkdir(mode=0o700)
+              for name, value in values.items():
+                  descriptor = os.open(directory / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                  with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                      stream.write(value.rstrip("\n") + "\n")
+              with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
+                  stream.write(f"SQUADPAD_REMOTE_SSH_KEY_FILE={directory / 'identity'}\n")
+                  stream.write(f"SQUADPAD_REMOTE_SSH_KNOWN_HOSTS_FILE={directory / 'known_hosts'}\n")
+          except (OSError, ValueError):
+              sys.exit("Temporary SSH credential preparation failed.")
+          PY
+
+      - name: Verify evidence encryption before any guest changes
+        id: evidence-preflight
+        run: |
+          python3 -B Tools/Unreal/seal_native_evidence.py \
+            --preflight \
+            --identity-file "$SQUADPAD_REMOTE_SSH_KEY_FILE"
+
+      - name: Run the fixed OS and unprivileged archive stages
+        env:
+          SQUADPAD_REMOTE_SSH_HOST: ${{ secrets.SQUADPAD_REMOTE_SSH_HOST }}
+          SQUADPAD_BOOTSTRAP_CONFIG: ${{ secrets.SQUADPAD_BOOTSTRAP_CONFIG }}
+          SQUADPAD_RUN_ID: gha-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          python3 -B Tools/Unreal/bootstrap_remote_worker.py \
+            --run-id "$SQUADPAD_RUN_ID" \
+            --output-dir "$SQUADPAD_BOOTSTRAP_OUTPUT"
+
+      - name: Encrypt the bounded bootstrap evidence allowlist
+        id: seal-evidence
+        if: always() && steps.evidence-preflight.outcome == 'success'
+        run: |
+          python3 -B Tools/Unreal/seal_native_evidence.py \
+            --kind bootstrap \
+            --input-dir "$SQUADPAD_BOOTSTRAP_OUTPUT" \
+            --identity-file "$SQUADPAD_REMOTE_SSH_KEY_FILE" \
+            --output-file "$SQUADPAD_BOOTSTRAP_SEALED_OUTPUT/bootstrap-evidence.tar.age"
+
+      - name: Upload only encrypted bootstrap evidence
+        id: upload-evidence
+        if: always() && steps.seal-evidence.outcome == 'success'
+        timeout-minutes: 3
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bootstrap-evidence-encrypted
+          path: ${{ env.SQUADPAD_BOOTSTRAP_SEALED_OUTPUT }}/bootstrap-evidence.tar.age
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+
+      - name: Publish only the validated bootstrap summary
+        if: always()
+        env:
+          SQUADPAD_EVIDENCE_SEAL_OUTCOME: ${{ steps.seal-evidence.outcome }}
+          SQUADPAD_EVIDENCE_UPLOAD_OUTCOME: ${{ steps.upload-evidence.outcome }}
+        run: |
+          python3 -B - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, str(Path("Tools/Unreal").resolve()))
+          from bootstrap_remote_worker import empty_summary, public_summary
+          report = empty_summary("not_started")
+          value = os.environ.get("SQUADPAD_BOOTSTRAP_OUTPUT")
+          if value:
+              try:
+                  path = Path(value) / "bootstrap-result.json"
+                  if path.is_file() and path.stat().st_size <= 1048576:
+                      report = public_summary(json.loads(path.read_text(encoding="utf-8"))["summary"])
+              except (OSError, ValueError, TypeError, KeyError):
+                  report = empty_summary("result_invalid")
+          sealed = os.environ.get("SQUADPAD_EVIDENCE_SEAL_OUTCOME") == "success"
+          uploaded = os.environ.get("SQUADPAD_EVIDENCE_UPLOAD_OUTCOME") == "success"
+          lines = ["## Temporary worker preparation", "", "```json", json.dumps(report, indent=2), "```", "",
+                   "Bootstrap success establishes preparation and validated archive extraction only.",
+                   "No engine, compiler, native test or rendered animation runs in this job.",
+                   "The full archive hash is observed evidence; publisher authenticity is not established.",
+                   f"Evidence encrypted: {str(sealed).lower()}. Ciphertext uploaded: {str(uploaded).lower()}.",
+                   "Retrieve within three days and decrypt privately. Upload does not establish successful recovery.",
+                   "A failed stage can leave partial setup. Reruns refuse existing destinations.",
+                   "The private deadline is operator supplied. This job does not verify provider deletion or stop billing."]
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
+              stream.write("\n".join(lines) + "\n")
+          PY
+
+      - name: Remove temporary credentials and runner bootstrap evidence
+        if: always()
+        run: |
+          python3 -B - <<'PY'
+          import os
+          from pathlib import Path
+          import shutil
+          root = Path(os.environ["RUNNER_TEMP"])
+          suffix = os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
+          try:
+              for prefix in ("squadpad-bootstrap-ssh-", "squadpad-bootstrap-output-", "squadpad-bootstrap-sealed-"):
+                  path = root / (prefix + suffix)
+                  if path.is_symlink():
+                      path.unlink()
+                  elif path.is_dir():
+                      shutil.rmtree(path)
+          except OSError:
+              raise SystemExit("Temporary runner cleanup failed.") from None
+          PY

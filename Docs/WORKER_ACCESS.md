@@ -60,11 +60,13 @@ authentication cause because raw diagnostics stay unpublished.
 
 ## Work still required after access succeeds
 
-Independent provider cleanup, the prepared OS setup, an unprivileged `squadpad`
-account, the private engine transfer, installation checks and private native
-evidence collection remain separate work. The existing `native-build.yml`
-requires a prepared worker and installed engine. This inspection does not
-perform those steps or enable that workflow.
+Independent provider cleanup remains a separate prerequisite. After inspection,
+the manual [worker bootstrap](WORKER_BOOTSTRAP.md) can prepare the OS and an
+unprivileged `squadpad` account, then transfer and validate the engine. It needs
+its own private configuration and explicit readiness flag. The later
+`native-build.yml` requires that prepared worker and installed engine. Both
+execution workflows support [encrypted evidence collection](PRIVATE_NATIVE_EVIDENCE.md).
+This inspection does not perform those steps or enable either workflow.
 
 The focused offline tests are:
 

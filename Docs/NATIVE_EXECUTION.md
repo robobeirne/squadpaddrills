@@ -1,7 +1,8 @@
 # First native Unreal build and reader test
 
-Status on 21 October 2026: launchers, an independent deletion watchdog and offline
-tests are implemented. The user approved up to US$5 including tax for one native
+Status on 21 October 2026: launchers, bounded worker bootstrap, encrypted evidence
+handoff, an independent deletion watchdog and offline tests are implemented. The
+user approved up to US$5 including tax for one native
 build attempt. Bounded metadata reads of the user-supplied
 `Linux_Unreal_Engine_5.8.4.zip` succeeded; the observed package identity, sizes and
 toolchain manifest are recorded in [ENGINE_ARCHIVE.json](ENGINE_ARCHIVE.json).
@@ -33,8 +34,10 @@ If the cloud workspace cannot complete an SSH connection, use the manual
 That bounded, read-only check verifies authentication and reports selected
 guest resources. It does not install packages, create the build account,
 transfer Unreal, establish provider cleanup or run the native test. The separate
-native workflow below still requires a fully prepared worker and private
-evidence collection.
+[worker bootstrap](WORKER_BOOTSTRAP.md) prepares a fresh worker through fixed
+root and unprivileged SSH stages. Both bootstrap and the native workflow support
+[encrypted evidence handoff](PRIVATE_NATIVE_EVIDENCE.md). They still require
+operator configuration and independent provider cleanup before execution.
 
 Epic [recommends 32 GB RAM for Linux development](https://dev.epicgames.com/documentation/en-us/unreal-engine/linux-development-requirements-for-unreal-engine).
 This smaller first attempt is limited to one project module with seven authored
@@ -197,7 +200,7 @@ Set these four environment variables through the approved credential channel:
 | `SQUADPAD_REMOTE_SSH_KEY_FILE` | Absolute path to a private SSH identity, mode 0600 |
 | `SQUADPAD_REMOTE_SSH_KNOWN_HOSTS_FILE` | Absolute path to independently verified host keys |
 
-Use a newly generated identity for the temporary worker. Host keys must be
+Use the existing temporary identity created for this attempt. Host keys must be
 verified through the trusted provisioning or provider console channel.
 `ssh-keyscan` alone does not establish trust. Neither credentials nor host
 values belong in Git, the command line, a public issue or a chat message.
@@ -261,7 +264,10 @@ manual-only coordinator on standard `ubuntu-24.04`. It never installs Unreal
 on the GitHub runner or registers the worker as a self-hosted runner. The
 workflow checks out the dispatch commit and only permits the canonical
 repository's `main` ref. It has read-only repository permission, no arbitrary
-command inputs, a 50-minute job timeout and serialized native runs.
+command inputs, a 75-minute job timeout and serialized bootstrap/native runs.
+The remote build/test coordinator keeps its 45-minute limit; the larger outer
+bound accommodates package setup, encryption preflight and failure-evidence
+upload without consuming the build budget.
 
 The workflow must first be reviewed and merged onto the default branch before
 GitHub exposes manual dispatch. This is a
@@ -275,16 +281,29 @@ to exactly `true`. Repository secrets hold `SQUADPAD_REMOTE_SSH_HOST`,
 `SQUADPAD_REMOTE_SSH_KNOWN_HOSTS`. No secrets or readiness variable have been set
 as part of this source increment. Missing configuration fails explicitly.
 
-Only the sanitized result appears in the public job summary. Detailed files
-are not uploaded as public Actions artifacts. They remain on the worker at
-`/srv/squadpad/runs/gha-<run-id>-<attempt>/repo/Saved/SquadPad/NativeGate/gha-<run-id>-<attempt>/`
-and temporarily on the GitHub runner. Private collection from the worker is
-required before deletion. The first attempt uses the direct cloud controller
-above so its returned evidence is immediately available for review.
+Only the sanitized result appears in the public job summary. The workflow
+preflights encryption before remote execution, then seals the bounded evidence
+allowlist with `age` for the existing temporary SSH identity. Only ciphertext
+is uploaded as the fixed `native-evidence-encrypted` Actions artifact, with
+three-day retention. Public-repository artifact access is not private storage;
+the private key protects the contents. Download, decrypt and validate the
+bundle using [the evidence procedure](PRIVATE_NATIVE_EVIDENCE.md) before claiming
+the detailed evidence has been retrieved or reviewed. Successful encryption or
+upload alone does not establish native success.
 
-The portable workflow tests both launchers and the deletion watchdog on Python
-3.12 and 3.10 without Unreal, SSH or provider API calls. Those jobs can run on the
-draft PR. They do not enable or invoke either manual workflow.
+Original detailed files also remain on the worker at
+`/srv/squadpad/runs/gha-<run-id>-<attempt>/repo/Saved/SquadPad/NativeGate/gha-<run-id>-<attempt>/`
+and temporarily on the GitHub runner. The runner removes temporary credentials,
+plaintext and ciphertext after its upload attempt, subject to runner availability.
+Retain the decryption key until the evidence is safely retrieved. Collect failure
+evidence as well as success evidence; neither path changes the worker's
+independent deletion deadline.
+
+The portable workflow tests launchers, bootstrap, archive handling, the deletion
+watchdog and evidence sealing on Python 3.12 and 3.10. Encryption tests use
+synthetic keys and files. No test connects to a worker or provider, downloads the
+real archive or invokes Unreal. Those jobs can run on the draft PR; they do not
+enable or invoke the manual execution workflows.
 
 ## After this gate passes
 
