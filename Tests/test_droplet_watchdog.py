@@ -366,5 +366,262 @@ class DropletWatchdogTests(unittest.TestCase):
                     transport.request("GET", "/v2/droplets/1")
 
 
+class ExistingDropletRecoveryTests(unittest.TestCase):
+    def setUp(self):
+        self.clock = FakeClock()
+        self.provider = SyntheticProvider(self.clock)
+        self.events = []
+        self.configure_age(3600)
+
+    def configure_age(self, age):
+        self.provider.preexisting = True
+        self.provider.droplet.update(name="ubuntu-s-4vcpu-8gb-lon1", created_at=guard.utc(BASE - age))
+        self.config = guard.Config(self.provider.droplet["name"], CONFIG.size, CONFIG.image_id,
+                                   self.provider.droplet["id"], self.provider.droplet["created_at"])
+
+    def run_guard(self):
+        return guard.Watchdog(self.config, self.provider, clock=self.clock,
+                              emit=lambda receipt: self.events.append(copy.deepcopy(receipt))).run()
+
+    def assert_rejected(self, receipt, reason):
+        self.assertEqual(receipt["status"], "failed")
+        self.assertEqual(receipt["failure_reason"], reason)
+        self.assertFalse(receipt["armed"])
+        self.assertFalse(receipt["pre_creation_armed"])
+        self.assertFalse(receipt["deletion_verified"])
+        self.assertFalse(receipt["billing_cap_guaranteed"])
+        self.assertIsNone(receipt["bound"])
+        self.assertFalse(any(method == "DELETE" for method, _, _ in self.provider.calls))
+        self.assertTrue(all(path == "/v2/droplets/987654321" for _, path, _ in self.provider.calls))
+
+    def argv(self):
+        return ["--name", self.config.name, "--size", self.config.size, "--image-id", str(self.config.image_id),
+                "--existing-id", str(self.config.existing_id), "--existing-created-at", self.config.existing_created_at]
+
+    def test_exact_id_recovery_keeps_original_deadlines_without_pre_creation_arming(self):
+        receipt = self.run_guard()
+        self.assertEqual([e["status"] for e in self.events], ["recovering", "bound", "deleting", "deleted_verified"])
+        self.assertEqual(receipt["binding_mode"], "existing_exact_id")
+        self.assertEqual(receipt["creation_window_seconds"], 0)
+        self.assertFalse(receipt["armed"])
+        self.assertFalse(receipt["pre_creation_armed"])
+        self.assertNotIn("armed_at_utc", receipt)
+        self.assertEqual(receipt["recovery_started_at_utc"], guard.utc(BASE))
+        self.assertEqual(receipt["bound"]["id"], self.config.existing_id)
+        self.assertEqual(receipt["bound"]["created_at"], self.config.existing_created_at)
+        self.assertEqual(receipt["delete_at_utc"], guard.utc(BASE - 3600 + guard.DELETE_AGE))
+        self.assertEqual(receipt["verify_before_utc"], guard.utc(BASE - 3600 + guard.VERIFY_AGE))
+        self.assertEqual(receipt["existing_age_at_binding_seconds"], 3600)
+        self.assertFalse(receipt["deletion_due_on_recovery"])
+        self.assertFalse(receipt["manual_deletion_required"])
+        self.assertEqual(self.provider.calls[0][:2], ("GET", "/v2/droplets/987654321"))
+        self.assertTrue(all(path == "/v2/droplets/987654321" for _, path, _ in self.provider.calls))
+        deletion = next(call for call in self.provider.calls if call[0] == "DELETE")
+        self.assertEqual(deletion[2], guard.DELETE_AGE - 3600)
+        self.assertTrue(receipt["deletion_before_deadline"])
+        self.assertFalse(receipt["billing_cap_guaranteed"])
+
+    def test_recovery_rejects_wrong_exact_id_or_created_at(self):
+        for field, value in (("id", 999), ("created_at", guard.utc(BASE - 3601)),
+                             ("created_at", self.config.existing_created_at.replace("Z", ".000Z"))):
+            with self.subTest(field=field, value=value):
+                self.setUp()
+                self.provider.droplet[field] = value
+                self.assert_rejected(self.run_guard(), "existing_droplet_identity_mismatch")
+                self.assertEqual(len(self.provider.calls), 1)
+
+    def test_recovery_requires_full_configuration_and_exact_name(self):
+        mutations = [
+            lambda d: d.update(name=d["name"].upper()), lambda d: d.update(vcpus=8),
+            lambda d: d.update(memory=32768), lambda d: d.update(disk=600),
+            lambda d: d.update(size_slug="wrong-size"), lambda d: d["size"].update(slug="wrong-size"),
+            lambda d: d["region"].update(slug="nyc3"), lambda d: d["image"].update(id=999),
+            lambda d: d.update(features=["backups"]), lambda d: d.update(volume_ids=["extra"]),
+            lambda d: d.update(backup_ids=[1]), lambda d: d.update(snapshot_ids=[2]),
+        ]
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                self.setUp()
+                mutate(self.provider.droplet)
+                receipt = self.run_guard()
+                self.assert_rejected(receipt, "unexpected_extra_resources" if
+                                     any(self.provider.droplet[key] for key in ("volume_ids", "backup_ids", "snapshot_ids"))
+                                     else "unexpected_droplet_configuration")
+        self.setUp()
+        self.provider.droplet["size"]["price_hourly"] = "0.072000001"
+        self.assert_rejected(self.run_guard(), "hourly_price_above_ceiling_or_invalid")
+
+    def test_recovery_rejects_future_creation_even_with_matching_identity(self):
+        for age in (-1, -0.001):
+            with self.subTest(age=age):
+                self.setUp()
+                self.configure_age(age)
+                self.assert_rejected(self.run_guard(), "existing_droplet_created_in_future")
+
+    def test_recovery_at_or_after_delete_age_deletes_immediately_before_original_deadline(self):
+        for age in (guard.DELETE_AGE, guard.DELETE_AGE + 60, guard.VERIFY_AGE - 1):
+            with self.subTest(age=age):
+                self.setUp()
+                self.configure_age(age)
+                receipt = self.run_guard()
+                self.assertEqual(receipt["status"], "deleted_verified")
+                self.assertTrue(receipt["deletion_due_on_recovery"])
+                self.assertTrue(receipt["deletion_before_deadline"])
+                self.assertFalse(receipt["manual_deletion_required"])
+                self.assertEqual([(m, p) for m, p, _ in self.provider.calls], [
+                    ("GET", "/v2/droplets/987654321"), ("DELETE", "/v2/droplets/987654321"),
+                    ("GET", "/v2/droplets/987654321")])
+                self.assertEqual(self.clock.elapsed, 0)
+                self.assertEqual(receipt["verify_before_utc"], guard.utc(BASE - age + guard.VERIFY_AGE))
+
+    def test_expired_recovery_refuses_adoption_and_requires_manual_deletion(self):
+        for age in (guard.VERIFY_AGE, guard.VERIFY_AGE + 1, guard.VERIFY_AGE + 3600):
+            with self.subTest(age=age):
+                self.setUp()
+                self.configure_age(age)
+                receipt = self.run_guard()
+                self.assert_rejected(receipt, "existing_droplet_lifetime_expired_manual_deletion_required")
+                self.assertTrue(receipt["manual_deletion_required"])
+                self.assertEqual(receipt["operator_action"], "Delete this verified Droplet through the provider console immediately.")
+                self.assertEqual(len(self.provider.calls), 1)
+                self.assertEqual(self.clock.elapsed, 0)
+
+    def test_recovery_lookup_latency_counts_against_original_lifetime(self):
+        self.configure_age(guard.VERIFY_AGE - 5)
+        def delay(method, path):
+            self.clock.elapsed += 10
+        self.provider.handler = delay
+        receipt = self.run_guard()
+        self.assert_rejected(receipt, "existing_droplet_lifetime_expired_manual_deletion_required")
+        self.assertTrue(receipt["manual_deletion_required"])
+
+    def test_recovery_deadline_expiring_after_binding_requires_manual_deletion(self):
+        def emit(receipt):
+            if receipt["status"] == "bound":
+                self.clock.elapsed = guard.VERIFY_AGE - 3600
+        receipt = guard.Watchdog(self.config, self.provider, clock=self.clock, emit=emit).run()
+        self.assertEqual(receipt["status"], "failed")
+        self.assertEqual(receipt["failure_reason"], "deletion_verification_deadline_expired")
+        self.assertIsNotNone(receipt["bound"])
+        self.assertTrue(receipt["manual_deletion_required"])
+        self.assertIn("provider console immediately", receipt["operator_action"])
+        self.assertFalse(receipt["deletion_verified"])
+        self.assertFalse(any(method == "DELETE" for method, _, _ in self.provider.calls))
+
+    def test_recovery_ineffective_deletion_reaches_original_deadline_and_requires_manual_cleanup(self):
+        self.configure_age(guard.DELETE_AGE)
+        self.provider.handler = lambda method, _: guard.Reply(204) if method == "DELETE" else None
+        receipt = self.run_guard()
+        self.assertEqual(receipt["status"], "failed")
+        self.assertEqual(receipt["failure_reason"], "deletion_verification_deadline_expired")
+        self.assertEqual(self.clock.elapsed, guard.VERIFY_AGE - guard.DELETE_AGE)
+        self.assertEqual(receipt["delete_attempts"], 30)
+        self.assertTrue(receipt["manual_deletion_required"])
+        self.assertFalse(receipt["deletion_verified"])
+        self.assertFalse(receipt["deletion_before_deadline"])
+
+    def test_recovery_late_verified_absence_does_not_request_deleting_absent_resource(self):
+        self.configure_age(guard.VERIFY_AGE - 1)
+        def respond(method, path):
+            if method == "GET" and self.provider.deleted:
+                self.clock.elapsed += 2
+                return guard.Reply(404)
+        self.provider.handler = respond
+        receipt = self.run_guard()
+        self.assertEqual(receipt["status"], "failed")
+        self.assertEqual(receipt["failure_reason"], "absence_verified_after_deadline")
+        self.assertTrue(receipt["deletion_verified"])
+        self.assertFalse(receipt["deletion_before_deadline"])
+        self.assertFalse(receipt["manual_deletion_required"])
+
+    def test_initial_absence_errors_or_unrelated_response_do_not_claim_recovery(self):
+        cases = [
+            (guard.Reply(404), "existing_droplet_not_found"),
+            (guard.Reply(401), "provider_authentication_or_scope_failure"),
+            (guard.Reply(503), "initial_request_failed"),
+            (guard.Reply(200, {"droplets": [self.provider.droplet]}), "invalid_existing_droplet_response"),
+            (guard.Reply(204), "invalid_existing_droplet_response"),
+        ]
+        for reply, reason in cases:
+            with self.subTest(status=reply.status, reason=reason):
+                self.setUp()
+                self.provider.handler = lambda *_: reply
+                self.assert_rejected(self.run_guard(), reason)
+                self.assertEqual(len(self.provider.calls), 1)
+
+    def test_clock_rollback_never_restarts_existing_resource_allowance(self):
+        self.clock.hook = lambda c: setattr(c, "offset", -7200)
+        receipt = self.run_guard()
+        deletion = next(call for call in self.provider.calls if call[0] == "DELETE")
+        self.assertEqual(deletion[2], guard.DELETE_AGE - 3600)
+        self.assertEqual(receipt["status"], "deleted_verified")
+
+    def test_recovery_preflight_has_no_token_access_or_transport(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(guard.os, "environ") as environment, \
+                mock.patch.object(guard, "HttpTransport") as transport, \
+                mock.patch("sys.stdout", new_callable=io.StringIO):
+            path = Path(directory) / "receipt.json"
+            self.assertEqual(guard.main(self.argv() + ["--receipt", str(path)]), 0)
+            receipt = json.loads(path.read_text())
+            self.assertEqual(receipt["status"], "preflight_only")
+            self.assertEqual(receipt["binding_mode"], "existing_exact_id")
+            self.assertFalse(receipt["pre_creation_armed"])
+            self.assertFalse(receipt["provider_api_contacted"])
+            self.assertEqual(receipt["expected"]["id"], self.config.existing_id)
+            self.assertEqual(receipt["expected"]["created_at"], self.config.existing_created_at)
+            self.assertNotIn(mock.call(guard.TOKEN_ENV), environment.get.call_args_list)
+            transport.assert_not_called()
+
+    def test_cli_requires_paired_recovery_arguments_before_token_access(self):
+        base = ["--name", CONFIG.name, "--size", CONFIG.size, "--image-id", str(CONFIG.image_id), "--watch"]
+        for extra in (["--existing-id", str(self.config.existing_id)],
+                      ["--existing-created-at", self.config.existing_created_at]):
+            with self.subTest(extra=extra), mock.patch.object(guard.os, "environ") as environment, \
+                    mock.patch.object(guard, "HttpTransport") as transport, \
+                    mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+                self.assertEqual(guard.main(base + extra), 1)
+                self.assertEqual(json.loads(output.getvalue())["failure_reason"], "existing_id_and_created_at_must_be_paired")
+                self.assertNotIn(mock.call(guard.TOKEN_ENV), environment.get.call_args_list)
+                transport.assert_not_called()
+
+    def test_existing_id_requires_a_strict_positive_decimal_integer(self):
+        for value in ("0", "-1", "+1", "01", " 1", "1 ", "1.0", "1e3", "True", "１２３", str(2**63), "9" * 100):
+            with self.subTest(value=value), mock.patch("sys.stderr", new_callable=io.StringIO), \
+                    mock.patch.object(guard, "HttpTransport") as transport:
+                argv = self.argv()
+                argv[argv.index("--existing-id") + 1] = value
+                with self.assertRaises(SystemExit) as failure:
+                    guard.main(argv + ["--watch"])
+                self.assertEqual(failure.exception.code, 2)
+                transport.assert_not_called()
+        for value in (True, 1.0, "1", 0, -1, 2**63):
+            with self.subTest(config_value=value), self.assertRaisesRegex(guard.GuardError, "^invalid_existing_id$"):
+                guard.Config(self.config.name, CONFIG.size, CONFIG.image_id, value, self.config.existing_created_at).validate()
+
+    def test_existing_created_at_requires_strict_valid_utc_provider_time(self):
+        for value in ("", "invalid", "2026-02-30T12:00:00Z", "2026-10-21T12:00:00+00:00",
+                      "2026-10-21 12:00:00Z", "2026-10-21T12:00:00.1234567Z", "2026-10-21T12:00:00z",
+                      " 2026-10-21T12:00:00Z", "２０２６-10-21T12:00:00Z"):
+            with self.subTest(value=value), mock.patch.object(guard.os, "environ") as environment, \
+                    mock.patch.object(guard, "HttpTransport") as transport, \
+                    mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+                argv = self.argv()
+                argv[argv.index("--existing-created-at") + 1] = value
+                self.assertEqual(guard.main(argv + ["--watch"]), 1)
+                self.assertEqual(json.loads(output.getvalue())["failure_reason"], "invalid_existing_created_at")
+                self.assertNotIn(mock.call(guard.TOKEN_ENV), environment.get.call_args_list)
+                transport.assert_not_called()
+
+    def test_existing_name_allowance_does_not_weaken_fresh_name_validation(self):
+        self.config.validate()
+        with self.assertRaisesRegex(guard.GuardError, "^invalid_unique_name$"):
+            guard.Config(self.config.name, CONFIG.size, CONFIG.image_id).validate()
+        for value in ("", "-invalid", "invalid-", "a..b", "a/b", "a b", "x" * 254, "x" * 64, "☃"):
+            with self.subTest(name=value), self.assertRaisesRegex(guard.GuardError, "^invalid_existing_name$"):
+                guard.Config(value, CONFIG.size, CONFIG.image_id, self.config.existing_id,
+                             self.config.existing_created_at).validate()
+
+
 if __name__ == "__main__":
     unittest.main()

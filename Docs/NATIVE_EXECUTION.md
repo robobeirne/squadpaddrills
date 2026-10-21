@@ -7,9 +7,9 @@ build attempt. Bounded metadata reads of the user-supplied
 toolchain manifest are recorded in [ENGINE_ARCHIVE.json](ENGINE_ARCHIVE.json).
 The complete archive transfer, full-file checksum, integrity and publisher
 authenticity remain unverified. Provider access and live watchdog configuration
-are still outstanding. No Unreal build, native automation test, worker connection
-or paid provisioning has occurred. The project still has no verified native
-binary or visual result.
+are still outstanding. No Unreal build, native automation test or worker connection
+has been verified. Provider resource state and charges require live verification.
+The project still has no verified native binary or visual result.
 
 This is the first part of SP2. It compiles `SquadPad3DEditor` and executes
 `SquadPad.Runtime.PlaybackReader.Contract` using a real installed Unreal engine.
@@ -51,10 +51,13 @@ credentials, Apple credentials or a GitHub runner registration.
 
 Record the worker resource ID, creation time, CPU, memory, disk and OS in the
 private execution record. The separate [deletion watchdog](DROPLET_WATCHDOG.md)
-must already be running and visibly armed before provisioning. Confirm it binds
-the new provider ID and creation time immediately afterward. Native and SSH
-timeouts do not delete the VM. Collect the evidence before the deletion deadline,
-including failure evidence if the build fails.
+must already be running and visibly armed before planned provisioning. Confirm
+it binds the new provider ID and creation time immediately afterward. If a worker
+already exists, follow the watchdog's explicit exact-ID recovery procedure before
+native execution. Recovery verifies the original provider creation timestamp and
+retains the original age-based deadlines; it does not claim pre-creation arming.
+Native and SSH timeouts do not delete the VM. Collect the evidence before the
+deletion deadline, including failure evidence if the build fails.
 
 ## Inspected archive and worker installation
 

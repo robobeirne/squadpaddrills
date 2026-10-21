@@ -1,14 +1,13 @@
 name: DigitalOcean Droplet lifetime watchdog
 
-# This independent controller must already be running outside the VM before
-# creation. The readiness variable only enables the workflow; it is not proof
-# of live arming. Inspect its current armed receipt before creating the unique
-# planned name, then confirm the bound provider ID and configuration.
+# Fresh mode must be running outside the VM before creation. Explicit recovery
+# instead verifies one supplied existing ID/time without resetting its lifetime.
+# Readiness only enables execution. Inspect live binding/cleanup evidence.
 on:
   workflow_dispatch:
     inputs:
       planned_name:
-        description: Unique squadpad-native- name with an 8-40 character suffix
+        description: Exact expected name (fresh mode requires squadpad-native- with an 8-40 character suffix)
         required: true
         type: string
       size_slug:
@@ -18,6 +17,16 @@ on:
       image_id:
         description: Numeric ID of the verified Ubuntu 22.04 x86-64 image
         required: true
+        type: string
+      existing_droplet_id:
+        description: Optional exact existing Droplet ID, paired with existing_created_at
+        required: false
+        default: ''
+        type: string
+      existing_created_at:
+        description: Optional exact provider UTC created_at, paired with existing_droplet_id
+        required: false
+        default: ''
         type: string
 
 permissions:
@@ -29,7 +38,7 @@ concurrency:
 
 jobs:
   watch-lifetime:
-    name: Supervise one approved fresh Droplet independently
+    name: Supervise one approved Droplet independently
     if: github.repository == 'robobeirne/squadpaddrills' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 330
@@ -37,12 +46,16 @@ jobs:
       - name: Require explicit watchdog readiness before secret access
         env:
           SQUADPAD_DO_WATCHDOG_ENABLED: ${{ vars.SQUADPAD_DO_WATCHDOG_ENABLED }}
+          SQUADPAD_EXISTING_DROPLET_ID: ${{ inputs.existing_droplet_id }}
+          SQUADPAD_EXISTING_CREATED_AT: ${{ inputs.existing_created_at }}
         run: |
           python3 -B - <<'PY'
           import os
           import sys
           if os.environ.get("SQUADPAD_DO_WATCHDOG_ENABLED") != "true":
               sys.exit("The Droplet watchdog is disabled. Prepare its restricted cleanup token and independent controller before enabling it. Readiness does not prove live arming.")
+          if bool(os.environ.get("SQUADPAD_EXISTING_DROPLET_ID")) != bool(os.environ.get("SQUADPAD_EXISTING_CREATED_AT")):
+              sys.exit("Existing-resource recovery requires both exact Droplet ID and provider created_at, or neither input for fresh mode.")
           PY
 
       - name: Check out the exact reviewed source
@@ -59,23 +72,33 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Arm and supervise the planned Droplet
+      - name: Supervise the Droplet using the selected binding mode
         if: success() && vars.SQUADPAD_DO_WATCHDOG_ENABLED == 'true'
         env:
           SQUADPAD_PLANNED_NAME: ${{ inputs.planned_name }}
           SQUADPAD_SIZE_SLUG: ${{ inputs.size_slug }}
           SQUADPAD_IMAGE_ID: ${{ inputs.image_id }}
+          SQUADPAD_EXISTING_DROPLET_ID: ${{ inputs.existing_droplet_id }}
+          SQUADPAD_EXISTING_CREATED_AT: ${{ inputs.existing_created_at }}
           SQUADPAD_DO_TOKEN: ${{ secrets.SQUADPAD_DO_CLEANUP_TOKEN }}
         shell: bash
         run: |
           SQUADPAD_RECEIPT_DIR="$(mktemp -d "$RUNNER_TEMP/squadpad-do-watchdog.XXXXXXXX")"
           SQUADPAD_WATCHDOG_RECEIPT="$SQUADPAD_RECEIPT_DIR/receipt.json"
           printf 'SQUADPAD_WATCHDOG_RECEIPT=%s\n' "$SQUADPAD_WATCHDOG_RECEIPT" >> "$GITHUB_ENV"
+          SQUADPAD_RECOVERY_ARGS=()
+          if [[ -n "$SQUADPAD_EXISTING_DROPLET_ID" || -n "$SQUADPAD_EXISTING_CREATED_AT" ]]; then
+            SQUADPAD_RECOVERY_ARGS=(
+              --existing-id "$SQUADPAD_EXISTING_DROPLET_ID"
+              --existing-created-at "$SQUADPAD_EXISTING_CREATED_AT"
+            )
+          fi
           python3 -B Tools/Cloud/droplet_watchdog.py \
             --name "$SQUADPAD_PLANNED_NAME" \
             --size "$SQUADPAD_SIZE_SLUG" \
             --image-id "$SQUADPAD_IMAGE_ID" \
             --receipt "$SQUADPAD_WATCHDOG_RECEIPT" \
+            "${SQUADPAD_RECOVERY_ARGS[@]}" \
             --watch
 
       - name: Summarize observed cleanup without a billing-cap claim
@@ -99,11 +122,14 @@ jobs:
           if report is None:
               lines.extend(["No valid controller receipt was produced. Arming and cleanup are unverified.", ""])
           else:
-              statuses = {"starting", "armed", "bound", "deleting", "deleted_verified", "failed", "preflight_only"}
+              statuses = {"starting", "recovering", "armed", "bound", "deleting", "deleted_verified", "failed", "preflight_only"}
               raw_status = report.get("status")
               status = raw_status if isinstance(raw_status, str) and raw_status in statuses else "unknown"
               clean = {"status": status, "billing_cap_guaranteed": False}
-              for key in ("provider_api_contacted", "armed", "deletion_verified", "deletion_before_deadline"):
+              binding_mode = report.get("binding_mode")
+              clean["binding_mode"] = binding_mode if isinstance(binding_mode, str) and binding_mode in {"fresh_after_arm", "existing_exact_id"} else "unknown"
+              for key in ("provider_api_contacted", "armed", "pre_creation_armed", "deletion_verified",
+                          "deletion_before_deadline", "manual_deletion_required"):
                   clean[key] = report.get(key) is True
               for key in ("requests", "delete_attempts", "transient_errors"):
                   value = report.get(key)
@@ -112,9 +138,12 @@ jobs:
               identity = bound.get("id") if isinstance(bound, dict) else None
               clean["bound_droplet_id"] = identity if type(identity) is int and identity > 0 else None
               lines.extend(["```json", json.dumps(clean, indent=2), "```", ""])
+              if report.get("manual_deletion_required") is True:
+                  lines.extend(["The verified Droplet has passed its lifetime deadline. Delete it through the provider console immediately.", ""])
           lines.extend([
               "The readiness variable enables this workflow. It does not establish live arming.",
-              "Inspect the current armed receipt before creating the uniquely named VM, and confirm its bound ID.",
+              "Fresh mode requires a live armed receipt before creation, followed by confirmation of the bound ID.",
+              "Existing-resource recovery requires an exact verified ID/time and preserves deadlines measured from provider creation. It never claims pre-creation arming.",
               "Only deleted_verified with deletion_before_deadline=true records observed absence within the configured window.",
               "Cancellation, controller timeout or provider failure can prevent cleanup and this summary.",
               "This controller creates no resources and does not guarantee a billing cap or cover account-level extras.",

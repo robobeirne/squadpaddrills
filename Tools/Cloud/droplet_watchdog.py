@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Independent, bounded cleanup guard for one newly created SquadPad Droplet.
+"""Independent, bounded cleanup guard for one explicitly identified Droplet.
 
 Python 3.10+, stdlib only. Default is local preflight: no token access or API.
 Use --watch on an already-running controller OUTSIDE the VM; observe its armed
 receipt before creating the uniquely named machine. This never creates a VM.
+An explicit existing-resource recovery mode instead requires its exact provider
+ID and created_at. Recovery preserves the original lifetime, never claims
+pre-creation arming, and never discovers an existing resource by name.
 
 The first attempt uses regular Basic 4 vCPU / 8 GiB RAM / 160 GiB disk in LON1.
 The operator must supply a live-verified size slug and Ubuntu 22.04 image ID.
@@ -45,6 +48,7 @@ VERIFY_AGE = 18_000
 HTTP_TIMEOUT = 15
 MAX_BODY_BYTES = 2_000_000
 NAME_PATTERN = r"squadpad-native-[a-z0-9][a-z0-9-]{6,38}[a-z0-9]"
+MAX_PROVIDER_ID = 2**63 - 1
 EXPECTED = {"region": "lon1", "vcpus": 4, "memory": 8192, "disk": 160,
             "hourly_usd_ceiling": "0.072", "backups_enabled": False}
 
@@ -68,9 +72,32 @@ class Config:
     name: str
     size: str
     image_id: int
+    existing_id: int | None = None
+    existing_created_at: str | None = None
+
+    @property
+    def recovering(self):
+        return self.existing_id is not None
 
     def validate(self):
-        if not re.fullmatch(NAME_PATTERN, self.name):
+        if (self.existing_id is None) != (self.existing_created_at is None):
+            raise GuardError("existing_id_and_created_at_must_be_paired")
+        if self.recovering:
+            if type(self.existing_id) is not int or not 0 < self.existing_id <= MAX_PROVIDER_ID:
+                raise GuardError("invalid_existing_id")
+            if not isinstance(self.existing_created_at, str) or not self.existing_created_at.isascii():
+                raise GuardError("invalid_existing_created_at")
+            try:
+                provider_time(self.existing_created_at)
+            except GuardError:
+                raise GuardError("invalid_existing_created_at") from None
+            # Recovery permits an explicitly supplied ordinary provider hostname.
+            # Exact ID/time/configuration matching still precedes any adoption.
+            if (not isinstance(self.name, str) or len(self.name) > 253 or
+                    not all(re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+                            for label in self.name.split("."))):
+                raise GuardError("invalid_existing_name")
+        elif not re.fullmatch(NAME_PATTERN, self.name):
             raise GuardError("invalid_unique_name")
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,62}", self.size):
             raise GuardError("invalid_size_slug")
@@ -78,7 +105,10 @@ class Config:
             raise GuardError("invalid_image_id")
 
     def expected(self):
-        return dict(EXPECTED, name=self.name, size_slug=self.size, image_id=self.image_id)
+        result = dict(EXPECTED, name=self.name, size_slug=self.size, image_id=self.image_id)
+        if self.recovering:
+            result.update(id=self.existing_id, created_at=self.existing_created_at)
+        return result
 
 
 @dataclass(frozen=True)
@@ -158,16 +188,26 @@ def provider_time(value):
         raise GuardError("invalid_provider_created_at") from None
 
 
+def positive_provider_id(value):
+    if (not re.fullmatch(r"[1-9][0-9]{0,18}", value) or
+            int(value) > MAX_PROVIDER_ID):
+        raise argparse.ArgumentTypeError("requires a positive decimal provider ID without signs or padding")
+    return int(value)
+
+
 def initial_receipt(config, watch):
     config.validate()
     return {"schema": "squadpad.droplet-watchdog.v1", "mode": "watch" if watch else "preflight",
             "status": "starting" if watch else "preflight_only", "expected": config.expected(),
+            "binding_mode": "existing_exact_id" if config.recovering else "fresh_after_arm",
             "token_env": TOKEN_ENV, "required_token_scopes": ["droplet:read", "droplet:delete"],
             "watchdog_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            "creation_window_seconds": CREATE_WINDOW, "delete_age_seconds": DELETE_AGE,
+            "creation_window_seconds": 0 if config.recovering else CREATE_WINDOW,
+            "delete_age_seconds": DELETE_AGE,
             "verify_before_age_seconds": VERIFY_AGE, "provider_api_contacted": False,
-            "armed": False, "bound": None, "deletion_verified": False,
+            "armed": False, "pre_creation_armed": False, "bound": None, "deletion_verified": False,
             "deletion_before_deadline": False, "billing_cap_guaranteed": False,
+            "manual_deletion_required": False,
             "requests": 0, "delete_attempts": 0, "transient_errors": 0}
 
 
@@ -223,14 +263,23 @@ class Watchdog:
 
     def elapsed_epoch(self):
         # Never let a wall-clock rollback extend the provider-age budget.
-        return max(self.clock.time(), self.arm_wall + self.clock.monotonic() - self.arm_mono)
+        return max(self.clock.time(), self.clock_wall + self.clock.monotonic() - self.clock_mono)
+
+    def require_manual_deletion(self):
+        self.receipt.update(manual_deletion_required=True,
+                            operator_action="Delete this verified Droplet through the provider console immediately.")
 
     def bind(self, droplet):
         created = provider_time(droplet.get("created_at"))
         identity = droplet.get("id")
         if type(identity) is not int or identity <= 0:
             raise GuardError("invalid_provider_id")
-        if created < math.floor(self.arm_wall) or created > self.elapsed_epoch() + 5:
+        if self.config.recovering:
+            if identity != self.config.existing_id or droplet["created_at"] != self.config.existing_created_at:
+                raise GuardError("existing_droplet_identity_mismatch")
+            if created > self.elapsed_epoch():
+                raise GuardError("existing_droplet_created_in_future")
+        elif created < math.floor(self.clock_wall) or created > self.elapsed_epoch() + 5:
             raise GuardError("droplet_not_created_after_arm")
         core = {"name": self.config.name, "size_slug": self.config.size,
                 "vcpus": EXPECTED["vcpus"], "memory": EXPECTED["memory"], "disk": EXPECTED["disk"]}
@@ -255,6 +304,13 @@ class Watchdog:
             visibility[field] = "unavailable" if field not in droplet else "observed_empty"
             if field in droplet and droplet[field] != []:
                 raise GuardError("unexpected_extra_resources")
+        if self.config.recovering:
+            age = self.elapsed_epoch() - created
+            self.receipt.update(existing_age_at_binding_seconds=age,
+                                deletion_due_on_recovery=age >= DELETE_AGE)
+            if age >= VERIFY_AGE:
+                self.require_manual_deletion()
+                raise GuardError("existing_droplet_lifetime_expired_manual_deletion_required")
         self.created = created
         self.path = "/v2/droplets/" + str(identity)
         self.update("bound", bound={"id": identity, "created_at": droplet["created_at"],
@@ -284,27 +340,41 @@ class Watchdog:
 
     def run(self):
         try:
-            if self.candidate() is not None:
-                raise GuardError("planned_name_already_exists")
-            self.arm_wall, self.arm_mono = self.clock.time(), self.clock.monotonic()
-            self.update("armed", armed=True, armed_at_utc=utc(self.arm_wall))
-            while True:
-                remaining = CREATE_WINDOW - (self.clock.monotonic() - self.arm_mono)
-                if remaining <= 0:
-                    raise GuardError("creation_window_expired")
-                self.clock.sleep(min(15, remaining))
-                try:
-                    droplet = self.candidate()
-                except TransientError:
-                    continue
-                if self.clock.monotonic() - self.arm_mono >= CREATE_WINDOW:
-                    raise GuardError("creation_window_expired")
-                if droplet is not None:
-                    self.bind(droplet)
-                    break
+            if self.config.recovering:
+                self.clock_wall, self.clock_mono = self.clock.time(), self.clock.monotonic()
+                self.update("recovering", recovery_started_at_utc=utc(self.clock_wall))
+                reply = self.call("GET", "/v2/droplets/" + str(self.config.existing_id))
+                if reply.status == 404:
+                    raise GuardError("existing_droplet_not_found")
+                body = reply.document
+                droplet = body.get("droplet") if isinstance(body, dict) else None
+                if reply.status != 200 or not isinstance(droplet, dict):
+                    raise GuardError("invalid_existing_droplet_response")
+                self.bind(droplet)
+            else:
+                if self.candidate() is not None:
+                    raise GuardError("planned_name_already_exists")
+                self.clock_wall, self.clock_mono = self.clock.time(), self.clock.monotonic()
+                self.update("armed", armed=True, pre_creation_armed=True, armed_at_utc=utc(self.clock_wall))
+                while True:
+                    remaining = CREATE_WINDOW - (self.clock.monotonic() - self.clock_mono)
+                    if remaining <= 0:
+                        raise GuardError("creation_window_expired")
+                    self.clock.sleep(min(15, remaining))
+                    try:
+                        droplet = self.candidate()
+                    except TransientError:
+                        continue
+                    if self.clock.monotonic() - self.clock_mono >= CREATE_WINDOW:
+                        raise GuardError("creation_window_expired")
+                    if droplet is not None:
+                        self.bind(droplet)
+                        break
             while True:
                 age = self.elapsed_epoch() - self.created
                 if age >= VERIFY_AGE:
+                    if self.config.recovering:
+                        self.require_manual_deletion()
                     raise GuardError("deletion_verification_deadline_expired")
                 if age >= DELETE_AGE:
                     self.update("deleting")
@@ -358,15 +428,19 @@ def interrupt(*_):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--name", required=True, help="Unique squadpad-native- name; suffix 8–40 characters")
+    parser.add_argument("--name", required=True, help="Exact expected name; fresh mode requires squadpad-native- and an 8–40 character suffix")
     parser.add_argument("--size", required=True, help="Size slug verified from the live provider catalogue")
     parser.add_argument("--image-id", required=True, type=int, help="Verified Ubuntu 22.04 x86-64 image ID")
-    parser.add_argument("--watch", action="store_true", help="Contact API and supervise only this fresh planned VM")
+    parser.add_argument("--existing-id", type=positive_provider_id,
+                        help="Exact existing Droplet ID; requires --existing-created-at")
+    parser.add_argument("--existing-created-at",
+                        help="Exact provider UTC created_at for recovery; requires --existing-id")
+    parser.add_argument("--watch", action="store_true", help="Contact API and supervise only the explicitly selected Droplet")
     parser.add_argument("--receipt", type=Path, help="New receipt file; existing files are rejected")
     args = parser.parse_args(argv)
     handlers, prepared = {}, False
     try:
-        config = Config(args.name, args.size, args.image_id)
+        config = Config(args.name, args.size, args.image_id, args.existing_id, args.existing_created_at)
         receipt = initial_receipt(config, args.watch)
         sink = ReceiptSink(args.receipt)
         sink(receipt)  # Refuse stale output before accessing the token or provider.

@@ -301,8 +301,9 @@
     "cleanup_token_configured": false,
     "watchdog_armed": false,
     "native_execution_occurred": false,
-    "resources_created_by_this_work": 0,
-    "provider_charges_incurred_by_this_work_usd": "0.00",
+    "resources_created_by_this_work": null,
+    "provider_charges_incurred_by_this_work_usd": null,
+    "provider_resource_state_and_charges_verified": false,
     "supplied_archive_metadata_access_verified": true,
     "full_archive_transfer_verified": false,
     "epic_browser_session_verified": false,
@@ -324,6 +325,16 @@
     "secret_name": "SQUADPAD_DO_CLEANUP_TOKEN",
     "readiness_variable": "SQUADPAD_DO_WATCHDOG_ENABLED",
     "must_observe_live_armed_before_creation": true,
+    "existing_resource_recovery": {
+      "binding_mode": "existing_exact_id",
+      "requires_exact_provider_id_and_created_at": true,
+      "requires_full_expected_configuration": true,
+      "uses_exact_id_get_without_name_discovery": true,
+      "preserves_original_provider_age_deadlines": true,
+      "claims_pre_creation_arming": false,
+      "expired_resource_requires_manual_deletion": true,
+      "live_recovery_verified": false
+    },
     "verification": "fresh_exact_id_get_404_before_provider_age_5_hours",
     "provider_hard_dollar_cap": false
   },

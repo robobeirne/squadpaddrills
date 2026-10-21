@@ -1,18 +1,21 @@
 # Independent deletion of the first native-build worker
 
 Status on 21 October 2026: the driver, manual workflow and controlled tests
-are implemented. The expected first-attempt profile is now regular Basic
-4 vCPU / 8 GiB RAM / 160 GiB disk, to fit published Tier 2 limits. All 21
-controlled watchdog tests passed locally alongside the native and SSH launcher
-tests. No provider token has been configured, no live watchdog has been
-armed, and no VM has been created or deleted. The approved budget is US$5
-including tax for one attempt; see [the compute plan](REMOTE_BUILD_COSTS.md).
+are implemented. The expected first-attempt profile is regular Basic
+4 vCPU / 8 GiB RAM / 160 GiB disk, to fit published Tier 2 limits. All 38
+controlled watchdog tests passed locally, including the original 21 tests and
+17 tests for explicit recovery of an already-created resource. No provider API
+supervision or deletion has been verified by this source change. The approved
+budget is US$5 including tax for one attempt; see
+[the compute plan](REMOTE_BUILD_COSTS.md).
 
 ## Purpose and boundaries
 
 [`Tools/Cloud/droplet_watchdog.py`](../Tools/Cloud/droplet_watchdog.py) supervises
-one freshly created, uniquely named DigitalOcean Droplet from a separate
-controller. It never creates a resource. Default invocation performs local
+one explicitly identified DigitalOcean Droplet from a separate controller.
+Its default binding mode supervises a freshly created, uniquely named resource.
+An explicit recovery mode verifies one already-created resource by exact ID and
+provider creation timestamp. It never creates a resource. Default invocation performs local
 preflight, without reading a token or contacting the API. Only `--watch`
 authenticates and can delete the exact bound Droplet ID.
 
@@ -47,19 +50,28 @@ token has no additional permissions; the account owner must set its scopes.
 The token belongs in the secret store, never in chat, source, workflow inputs,
 the guest, a public issue or an uploaded artifact.
 
-After account access, fallback deletion, billing/tax, engine access and the exact
-live plan/image have been checked, set repository variable
+For a new resource, after account access, fallback deletion, billing/tax, engine
+access and the exact live plan/image have been checked, set repository variable
 `SQUADPAD_DO_WATCHDOG_ENABLED` to exactly `true`. This enables execution; it does
 not establish that a watchdog is currently running. No secret or readiness
 variable has been set by this source increment.
+
+For an already-running resource, establish its exact ID, provider creation
+timestamp, expected name, full configuration, price, restricted cleanup
+credentials and provider-console fallback, then enable and start recovery
+immediately. Recovery does not need SSH access or an engine transfer. Those
+remain separate prerequisites for native execution and must not delay cleanup
+protection for a resource which already exists.
 
 Required dispatch inputs are:
 
 | Input | Required value |
 | --- | --- |
-| `planned_name` | A new `squadpad-native-` name with an 8–40 character lowercase alphanumeric/hyphen suffix |
+| `planned_name` | Exact expected name. Fresh mode requires a new `squadpad-native-` name with an 8–40 character lowercase alphanumeric/hyphen suffix. |
 | `size_slug` | The live-verified catalogue slug for the planned regular Basic 4 vCPU / 8 GiB / 160 GiB plan |
 | `image_id` | The live-verified numeric Ubuntu 22.04 x86-64 image ID |
+| `existing_droplet_id` | Optional exact positive decimal provider ID, paired with `existing_created_at`. Leave both empty for fresh mode. |
+| `existing_created_at` | Optional exact provider UTC `created_at`, paired with `existing_droplet_id`. Use the provider's value unchanged, including any fractional seconds. |
 
 The exact slug and image ID are intentionally not guessed. The driver additionally
 checks `lon1`, 4 vCPU, memory `8192`, disk `160`, no backup feature, and a positive
@@ -87,6 +99,9 @@ the [native execution prerequisites](NATIVE_EXECUTION.md) before the build.
 
 ## Operate one bounded attempt
 
+This sequence applies to fresh-resource mode. Use the recovery procedure below
+for a resource which already exists.
+
 1. Dispatch the watchdog on the reviewed `main` commit with the three inputs.
    Inspect the live log. It must show a successful initial query with no existing
    name match, `status: "armed"`, and a current `armed_at_utc`. Confirm the job
@@ -111,8 +126,63 @@ the [native execution prerequisites](NATIVE_EXECUTION.md) before the build.
 
 Do not cancel the watchdog while a bound VM exists. A failed, cancelled or
 timed-out job requires immediate provider-console deletion and verification.
-Do not rerun it against an existing machine: initial discovery deliberately
-rejects pre-existing names, and a rerun would not resume the previous guard.
+Do not rerun fresh mode against an existing machine: initial discovery
+deliberately rejects pre-existing names. Recovery is a separate, explicit mode,
+not a new lifetime allowance or a claim of earlier protection.
+
+## Recover supervision of one existing resource
+
+Use recovery only for the explicitly authorized resource after verifying its
+identity through the provider account. Supply the normal expected name, size
+slug and image ID, plus both `existing_droplet_id` and `existing_created_at`.
+The CLI equivalents are `--existing-id` and `--existing-created-at`. Supplying
+only one is rejected. IDs must be positive decimal integers without signs,
+padding, whitespace or exponent notation. Creation time must be a valid UTC
+RFC 3339 timestamp ending in `Z`, with at most six fractional-second digits.
+
+Recovery sends its first request directly to `/v2/droplets/{id}`. It never
+lists resources or selects a candidate by name. A successful response must
+match the supplied ID and creation timestamp exactly, plus the expected name,
+image ID, size, region, CPU, memory, disk, hourly-price ceiling and resource
+checks used by fresh mode. An initial 404 fails binding rather than claiming
+successful cleanup of an identity which was never verified.
+
+An existing default provider hostname is accepted only in recovery mode. It
+must be a valid ASCII hostname of at most 253 characters, with labels of at
+most 63 characters. The returned name must equal the expected name exactly,
+including case. Fresh mode retains its narrower `squadpad-native-` rule.
+
+The original provider creation time defines every deadline:
+
+| Observed resource age after identity and configuration checks | Recovery behavior |
+| --- | --- |
+| Less than 4h45 | Bind the exact resource and supervise until its original deletion time. |
+| At least 4h45 and less than 5h | Bind and request exact-ID deletion immediately, without an initial wait. |
+| At least 5h | Refuse adoption, set `manual_deletion_required: true`, and instruct the operator to delete the verified resource through the provider console immediately. |
+| Creation time is in the future | Reject recovery and investigate the supplied identity or controller clock. |
+
+Lookup and verification time consume the existing allowance. Clock rollback
+cannot extend it. Recovery never subtracts elapsed time, backdates arming or
+starts a fresh five-hour period. Deletion still requires a subsequent exact-ID
+GET returning 404 before the original five-hour deadline. A DELETE response
+alone does not establish absence.
+
+If the original deadline expires after binding while absence remains
+unverified, recovery also reports `manual_deletion_required: true`. A late
+GET 404 records the observed absence but fails the deadline result. It does
+not request deletion of a resource already verified absent.
+
+Recovery receipts record `binding_mode: "existing_exact_id"`, the actual
+`recovery_started_at_utc`, and `pre_creation_armed: false`. The legacy `armed`
+field remains false, and no `armed_at_utc` is fabricated. Inspect the live
+`bound` receipt and its original `delete_at_utc` and `verify_before_utc`, or the
+terminal verified-deletion receipt if cleanup was already due. A `recovering`
+status alone does not establish binding or protection.
+
+If identity, configuration, credentials or the remaining lifetime prevent
+recovery, use the account owner's provider-console fallback immediately.
+This feature does not authorize unrelated resources, additional spending,
+native execution, or a replacement VM.
 
 ## Direct controller and local preflight
 
@@ -132,6 +202,18 @@ token supplied through the controller's secret channel as `SQUADPAD_DO_TOKEN`.
 An existing receipt path is rejected before credentials or API access. The
 controller needs Python 3.10+, stdlib only, and accurate time. Its monotonic
 clock prevents wall-clock rollback from extending the lifetime allowance.
+
+To preflight an explicitly identified existing resource, add the paired
+arguments to the same command:
+
+```sh
+  --existing-id "$SQUADPAD_EXISTING_DROPLET_ID" \
+  --existing-created-at "$SQUADPAD_EXISTING_CREATED_AT"
+```
+
+Preflight checks syntax and produces a receipt without reading the token or
+contacting the provider. It does not verify identity, resource age, configuration
+or live supervision. Only `--watch` performs those live checks.
 
 ## Evidence and limits
 
