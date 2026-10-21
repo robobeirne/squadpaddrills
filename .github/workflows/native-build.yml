@@ -15,7 +15,9 @@ jobs:
     name: Coordinate the approved Linux worker
     if: github.repository == 'robobeirne/squadpaddrills' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    # The remote coordinator still has its 45-minute bound. Leave time to seal
+    # and transfer evidence after a failed or timed-out remote command.
+    timeout-minutes: 75
     steps:
       - name: Initialize temporary run paths
         run: |
@@ -24,9 +26,12 @@ jobs:
           from pathlib import Path
           root = Path(os.environ["RUNNER_TEMP"])
           suffix = os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
+          sealed = root / ("squadpad-sealed-" + suffix)
+          sealed.mkdir(mode=0o700)
           with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
               stream.write(f"SQUADPAD_GATE_OUTPUT={root / ('squadpad-native-' + suffix)}\n")
               stream.write(f"SQUADPAD_KEY_DIR={root / ('squadpad-ssh-' + suffix)}\n")
+              stream.write(f"SQUADPAD_SEALED_OUTPUT={sealed}\n")
           PY
 
       - name: Check out the exact reviewed source
@@ -54,6 +59,12 @@ jobs:
               sys.exit("Native execution is disabled. Prepare the worker, evidence collection and independent deletion first. See Docs/NATIVE_EXECUTION.md.")
           PY
 
+      - name: Install evidence encryption from Ubuntu's package repository
+        timeout-minutes: 7
+        run: |
+          sudo -n timeout 180 apt-get -o Acquire::Retries=1 update -qq
+          sudo -n timeout 180 apt-get -o Dpkg::Use-Pty=0 install --no-install-recommends --yes age
+
       - name: Prepare temporary SSH credentials
         env:
           SQUADPAD_SSH_KEY_CONTENT: ${{ secrets.SQUADPAD_REMOTE_SSH_KEY }}
@@ -73,13 +84,20 @@ jobs:
           directory = Path(os.environ["SQUADPAD_KEY_DIR"])
           directory.mkdir(mode=0o700)
           for name, value in values.items():
-              with (directory / name).open("x", encoding="utf-8") as stream:
+              descriptor = os.open(directory / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+              with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
                   stream.write(value.rstrip("\n") + "\n")
-              (directory / name).chmod(0o600)
           with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
               stream.write(f"SQUADPAD_REMOTE_SSH_KEY_FILE={directory / 'identity'}\n")
               stream.write(f"SQUADPAD_REMOTE_SSH_KNOWN_HOSTS_FILE={directory / 'known_hosts'}\n")
           PY
+
+      - name: Verify evidence encryption before remote execution
+        id: evidence-preflight
+        run: |
+          python3 -B Tools/Unreal/seal_native_evidence.py \
+            --preflight \
+            --identity-file "$SQUADPAD_REMOTE_SSH_KEY_FILE"
 
       - name: Build and run the exact native reader contract remotely
         env:
@@ -93,8 +111,35 @@ jobs:
             --run-id "$SQUADPAD_RUN_ID" \
             --output-dir "$SQUADPAD_GATE_OUTPUT"
 
+      - name: Encrypt the bounded evidence allowlist
+        id: seal-evidence
+        if: always() && steps.evidence-preflight.outcome == 'success'
+        run: |
+          python3 -B Tools/Unreal/seal_native_evidence.py \
+            --kind native \
+            --input-dir "$SQUADPAD_GATE_OUTPUT" \
+            --identity-file "$SQUADPAD_REMOTE_SSH_KEY_FILE" \
+            --output-file "$SQUADPAD_SEALED_OUTPUT/native-evidence.tar.age"
+
+      - name: Upload only encrypted evidence
+        id: upload-evidence
+        if: always() && steps.seal-evidence.outcome == 'success'
+        timeout-minutes: 3
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-evidence-encrypted
+          path: ${{ env.SQUADPAD_SEALED_OUTPUT }}/native-evidence.tar.age
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+
       - name: Record the bounded result and evidence limits
         if: always()
+        env:
+          SQUADPAD_EVIDENCE_SEAL_OUTCOME: ${{ steps.seal-evidence.outcome }}
+          SQUADPAD_EVIDENCE_UPLOAD_OUTCOME: ${{ steps.upload-evidence.outcome }}
         run: |
           python3 -B - <<'PY'
           import json
@@ -108,25 +153,37 @@ jobs:
               lines.extend(["```json", json.dumps(report, indent=2), "```", ""])
           else:
               lines.extend(["No remote execution summary was produced. Native success is not established.", ""])
+          sealed = os.environ.get("SQUADPAD_EVIDENCE_SEAL_OUTCOME") == "success"
+          uploaded = os.environ.get("SQUADPAD_EVIDENCE_UPLOAD_OUTCOME") == "success"
           lines.extend([
               "This job can establish an Editor target build and native JSON-reader test only.",
               "It does not establish rendered animation, athlete anatomy, contact quality or iPhone execution.",
-              "Detailed logs remain on the worker and in this job's temporary directory. They are not published.",
-              "Collect those files privately before worker deletion. See Docs/NATIVE_EXECUTION.md.",
+              f"Evidence encrypted: {str(sealed).lower()}. Ciphertext uploaded: {str(uploaded).lower()}.",
+              "The public-repository artifact contains ciphertext only. Its confidentiality depends on the private SSH identity.",
+              "Upload does not establish retrieval, successful decryption or native success. Partial failure evidence is supported.",
+              "Download within three days, decrypt privately and validate the manifest. See Docs/PRIVATE_NATIVE_EVIDENCE.md.",
               "VM deletion is an independent operator responsibility. This job does not stop provider billing.",
           ])
           with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
               stream.write("\n".join(lines) + "\n")
           PY
 
-      - name: Remove temporary SSH credentials
+      - name: Remove temporary credentials and runner evidence
         if: always()
         run: |
           python3 -B - <<'PY'
           import os
           from pathlib import Path
           import shutil
-          path = Path(os.environ["SQUADPAD_KEY_DIR"])
-          if path.is_dir():
-              shutil.rmtree(path)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suffix = os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
+          try:
+              for prefix in ("squadpad-ssh-", "squadpad-native-", "squadpad-sealed-"):
+                  path = root / (prefix + suffix)
+                  if path.is_symlink():
+                      path.unlink()
+                  elif path.is_dir():
+                      shutil.rmtree(path)
+          except OSError:
+              raise SystemExit("Temporary runner cleanup failed.") from None
           PY
