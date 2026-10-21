@@ -42,6 +42,8 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 
 API = "https://api.digitalocean.com"
 TOKEN_ENV = "SQUADPAD_DO_TOKEN"
+CONFIG_ENV = "SQUADPAD_DO_WATCHDOG_CONFIG"
+MAX_CONFIG_BYTES = 8192
 CREATE_WINDOW = 900
 DELETE_AGE = 17_100
 VERIFY_AGE = 18_000
@@ -51,6 +53,8 @@ NAME_PATTERN = r"squadpad-native-[a-z0-9][a-z0-9-]{6,38}[a-z0-9]"
 MAX_PROVIDER_ID = 2**63 - 1
 EXPECTED = {"region": "lon1", "vcpus": 4, "memory": 8192, "disk": 160,
             "hourly_usd_ceiling": "0.072", "backups_enabled": False}
+PUBLIC_STATUSES = frozenset({"starting", "recovering", "armed", "bound", "deleting",
+                             "deleted_verified", "failed", "preflight_only"})
 
 
 class GuardError(Exception):
@@ -97,9 +101,9 @@ class Config:
                     not all(re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
                             for label in self.name.split("."))):
                 raise GuardError("invalid_existing_name")
-        elif not re.fullmatch(NAME_PATTERN, self.name):
+        elif not isinstance(self.name, str) or not re.fullmatch(NAME_PATTERN, self.name):
             raise GuardError("invalid_unique_name")
-        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,62}", self.size):
+        if not isinstance(self.size, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,62}", self.size):
             raise GuardError("invalid_size_slug")
         if type(self.image_id) is not int or self.image_id <= 0:
             raise GuardError("invalid_image_id")
@@ -133,6 +137,49 @@ def unique_object(pairs):
 
 def reject_constant(_):
     raise ValueError()
+
+
+def config_from_json(value):
+    """Read one private configuration. Never echo JSON values or parser errors."""
+    if not isinstance(value, str) or not value or len(value) > MAX_CONFIG_BYTES:
+        raise GuardError("missing_or_invalid_private_configuration")
+    try:
+        if len(value.encode("utf-8")) > MAX_CONFIG_BYTES:
+            raise GuardError("missing_or_invalid_private_configuration")
+        document = json.loads(value, object_pairs_hook=unique_object, parse_constant=reject_constant)
+    except (ValueError, UnicodeError, RecursionError):
+        raise GuardError("invalid_private_configuration_json") from None
+    required = {"planned_name", "size_slug", "image_id"}
+    recovery = {"existing_droplet_id", "existing_created_at"}
+    if not isinstance(document, dict) or set(document) not in (required, required | recovery):
+        raise GuardError("invalid_private_configuration_fields")
+    config = Config(document["planned_name"], document["size_slug"], document["image_id"],
+                    document.get("existing_droplet_id"), document.get("existing_created_at"))
+    if recovery <= set(document) and (config.existing_id is None or config.existing_created_at is None):
+        raise GuardError("invalid_private_recovery_configuration")
+    config.validate()
+    return config
+
+
+def public_receipt(receipt):
+    """Strict public projection shared by stdout and the GitHub job summary.
+
+    Resource identities, names, timestamps, paths, arbitrary reasons and all
+    extra fields remain in the private receipt only. Invalid values never pass
+    through merely because they occupy an allowlisted field.
+    """
+    report = receipt if isinstance(receipt, dict) else {}
+    status = report.get("status")
+    clean = {"status": status if isinstance(status, str) and status in PUBLIC_STATUSES else "unknown",
+             "billing_cap_guaranteed": False}
+    for key in ("provider_api_contacted", "armed", "pre_creation_armed", "identity_verified",
+                "deletion_verified", "deletion_before_deadline", "manual_deletion_required"):
+        clean[key] = report.get(key) is True
+    for key in ("requests", "delete_attempts", "transient_errors"):
+        value = report.get(key)
+        if type(value) is int and value >= 0:
+            clean[key] = value
+    return clean
 
 
 class HttpTransport:
@@ -206,6 +253,7 @@ def initial_receipt(config, watch):
             "delete_age_seconds": DELETE_AGE,
             "verify_before_age_seconds": VERIFY_AGE, "provider_api_contacted": False,
             "armed": False, "pre_creation_armed": False, "bound": None, "deletion_verified": False,
+            "identity_verified": False,
             "deletion_before_deadline": False, "billing_cap_guaranteed": False,
             "manual_deletion_required": False,
             "requests": 0, "delete_attempts": 0, "transient_errors": 0}
@@ -304,6 +352,7 @@ class Watchdog:
             visibility[field] = "unavailable" if field not in droplet else "observed_empty"
             if field in droplet and droplet[field] != []:
                 raise GuardError("unexpected_extra_resources")
+        self.receipt["identity_verified"] = True
         if self.config.recovering:
             age = self.elapsed_epoch() - created
             self.receipt.update(existing_age_at_binding_seconds=age,
@@ -409,8 +458,9 @@ class ReceiptSink:
         content = json.dumps(receipt, sort_keys=True, indent=2) + "\n"
         if self.path:
             if self.fresh:
-                self.path.parent.mkdir(parents=True, exist_ok=True)
-                with self.path.open("x", encoding="utf-8") as handle:
+                self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                descriptor = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                     handle.write(content)
                 self.fresh = False
             else:
@@ -419,32 +469,46 @@ class ReceiptSink:
                     handle.write(content)
                     temporary = handle.name
                 os.replace(temporary, self.path)
-        print(content, end="", flush=True)
+        print(json.dumps(public_receipt(receipt), sort_keys=True), flush=True)
 
 
 def interrupt(*_):
     raise KeyboardInterrupt()
 
 
+class PrivateArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        # argparse's default error includes rejected argument values.
+        self.exit(2, "Invalid watchdog arguments. Use --help for syntax.\n")
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--name", required=True, help="Exact expected name; fresh mode requires squadpad-native- and an 8–40 character suffix")
-    parser.add_argument("--size", required=True, help="Size slug verified from the live provider catalogue")
-    parser.add_argument("--image-id", required=True, type=int, help="Verified Ubuntu 22.04 x86-64 image ID")
+    parser = PrivateArgumentParser(description=__doc__)
+    parser.add_argument("--name", help="Exact expected name; fresh mode requires squadpad-native- and an 8–40 character suffix")
+    parser.add_argument("--size", help="Size slug verified from the live provider catalogue")
+    parser.add_argument("--image-id", type=int, help="Verified Ubuntu 22.04 x86-64 image ID")
     parser.add_argument("--existing-id", type=positive_provider_id,
                         help="Exact existing Droplet ID; requires --existing-created-at")
     parser.add_argument("--existing-created-at",
                         help="Exact provider UTC created_at for recovery; requires --existing-id")
+    parser.add_argument("--config-from-env", action="store_true",
+                        help="Read private configuration JSON from SQUADPAD_DO_WATCHDOG_CONFIG instead of resource arguments")
     parser.add_argument("--watch", action="store_true", help="Contact API and supervise only the explicitly selected Droplet")
     parser.add_argument("--receipt", type=Path, help="New receipt file; existing files are rejected")
     args = parser.parse_args(argv)
-    handlers, prepared = {}, False
+    resource_arguments = (args.name, args.size, args.image_id, args.existing_id, args.existing_created_at)
+    if args.config_from_env and any(value is not None for value in resource_arguments):
+        parser.error("configuration_sources_must_not_be_mixed")
+    if not args.config_from_env and any(value is None for value in resource_arguments[:3]):
+        parser.error("missing_resource_configuration")
+    handlers = {}
+    sink = ReceiptSink(args.receipt)
+    receipt = {"schema": "squadpad.droplet-watchdog.v1"}
     try:
-        config = Config(args.name, args.size, args.image_id, args.existing_id, args.existing_created_at)
+        config = (config_from_json(os.environ.get(CONFIG_ENV)) if args.config_from_env else
+                  Config(args.name, args.size, args.image_id, args.existing_id, args.existing_created_at))
         receipt = initial_receipt(config, args.watch)
-        sink = ReceiptSink(args.receipt)
         sink(receipt)  # Refuse stale output before accessing the token or provider.
-        prepared = True
         if not args.watch:
             return 0
         for name in ("SIGINT", "SIGTERM", "SIGHUP"):
@@ -462,14 +526,11 @@ def main(argv=None):
         # Do not expose raw OS/provider messages: they can contain paths or credentials.
         failure = {"status": "failed", "failure_reason": reason,
                    "deletion_verified": False, "billing_cap_guaranteed": False}
-        if prepared:
-            receipt.update(failure)
-            try:
-                sink(receipt)
-            except OSError:
-                print(json.dumps(failure), flush=True)
-        else:
-            print(json.dumps(failure), flush=True)
+        receipt.update(failure)
+        try:
+            sink(receipt)
+        except OSError:
+            print(json.dumps(public_receipt(receipt), sort_keys=True), flush=True)
         return 1
     finally:
         for signum, handler in handlers.items():

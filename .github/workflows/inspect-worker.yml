@@ -1,0 +1,116 @@
+name: Inspect Linux worker access
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: squadpad-worker-inspection
+  cancel-in-progress: false
+
+jobs:
+  inspect-worker:
+    name: Read the approved worker's system resources
+    if: github.repository == 'robobeirne/squadpaddrills' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Create temporary inspection paths
+        run: |
+          python3 -B - <<'PY'
+          import os
+          from pathlib import Path
+          import tempfile
+          directory = Path(tempfile.mkdtemp(prefix="squadpad-worker-inspection-", dir=os.environ["RUNNER_TEMP"]))
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
+              stream.write(f"SQUADPAD_INSPECTION_DIR={directory}\n")
+              stream.write(f"SQUADPAD_WORKER_SUMMARY={directory / 'summary.json'}\n")
+              stream.write(f"SQUADPAD_REMOTE_SSH_KEY_FILE={directory / 'identity'}\n")
+              stream.write(f"SQUADPAD_REMOTE_SSH_KNOWN_HOSTS_FILE={directory / 'known_hosts'}\n")
+          PY
+
+      - name: Check out the reviewed main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          lfs: false
+          submodules: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Prepare temporary SSH credentials
+        env:
+          SQUADPAD_SSH_KEY_CONTENT: ${{ secrets.SQUADPAD_REMOTE_SSH_KEY }}
+          SQUADPAD_KNOWN_HOSTS_CONTENT: ${{ secrets.SQUADPAD_REMOTE_SSH_KNOWN_HOSTS }}
+        run: |
+          python3 -B - <<'PY'
+          import os
+          from pathlib import Path
+          import sys
+          values = {
+              "SQUADPAD_REMOTE_SSH_KEY_FILE": os.environ.get("SQUADPAD_SSH_KEY_CONTENT", ""),
+              "SQUADPAD_REMOTE_SSH_KNOWN_HOSTS_FILE": os.environ.get("SQUADPAD_KNOWN_HOSTS_CONTENT", ""),
+          }
+          if not all(values.values()):
+              sys.exit("The SSH identity and independently verified host key secrets are required.")
+          for variable, value in values.items():
+              path = Path(os.environ[variable])
+              descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+              with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                  stream.write(value.rstrip("\n") + "\n")
+          PY
+
+      - name: Inspect through one pinned SSH connection
+        env:
+          SQUADPAD_REMOTE_SSH_HOST: ${{ secrets.SQUADPAD_REMOTE_SSH_HOST }}
+        run: |
+          python3 -B Tools/Unreal/inspect_remote_worker.py > "$SQUADPAD_WORKER_SUMMARY"
+
+      - name: Publish only the allowlisted inspection result
+        if: always()
+        run: |
+          python3 -B - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, str(Path("Tools/Unreal").resolve()))
+          from inspect_remote_worker import empty_summary, public_summary
+          report = empty_summary("not_started")
+          path_value = os.environ.get("SQUADPAD_WORKER_SUMMARY")
+          if path_value:
+              try:
+                  report = public_summary(json.loads(Path(path_value).read_text(encoding="utf-8")))
+              except (OSError, ValueError):
+                  report = empty_summary("result_invalid")
+          lines = ["## Worker access inspection", "", "```json", json.dumps(report, indent=2), "```", "",
+                   "This fixed inspection reads system resources through pinned SSH.",
+                   "It performs no worker setup, engine installation, native test or provider cleanup.",
+                   "A failed SSH result does not distinguish network, host-key, authentication and remote-command failures.",
+                   "No raw SSH output, host identity or detailed artifact is published."]
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
+              stream.write("\n".join(lines) + "\n")
+          PY
+
+      - name: Remove temporary credentials and inspection files
+        if: always()
+        run: |
+          python3 -B - <<'PY'
+          import os
+          from pathlib import Path
+          import shutil
+          value = os.environ.get("SQUADPAD_INSPECTION_DIR")
+          if value:
+              path = Path(value)
+              root = Path(os.environ["RUNNER_TEMP"]).resolve()
+              if path.parent.resolve() == root and path.name.startswith("squadpad-worker-inspection-") and not path.is_symlink():
+                  if path.is_dir():
+                      shutil.rmtree(path)
+          PY

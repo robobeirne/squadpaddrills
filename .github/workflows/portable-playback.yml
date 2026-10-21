@@ -35,7 +35,7 @@ jobs:
         run: python3 -B -m unittest Tests.test_playback -v
 
       - name: Test native launchers and Droplet watchdog without an engine or network
-        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate Tests.test_droplet_watchdog -v
+        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate Tests.test_droplet_watchdog Tests.test_inspect_remote_worker -v
 
       - name: Compile C++17 core and compare with Python reference
         run: python3 -B Tools/Playback/verify_native.py --report "$RUNNER_TEMP/runtime-core-validation.json"
@@ -97,4 +97,4 @@ jobs:
           python-version: '3.10'
 
       - name: Verify launcher and watchdog behavior without a worker or cloud provider
-        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate Tests.test_droplet_watchdog -v
+        run: python3 -B -m unittest Tests.test_native_gate Tests.test_remote_native_gate Tests.test_droplet_watchdog Tests.test_inspect_remote_worker -v

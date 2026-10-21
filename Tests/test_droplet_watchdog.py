@@ -8,6 +8,7 @@ from pathlib import Path
 import signal
 import sys
 import tempfile
+import textwrap
 import unittest
 from unittest import mock
 from urllib.error import HTTPError, URLError
@@ -577,11 +578,15 @@ class ExistingDropletRecoveryTests(unittest.TestCase):
         base = ["--name", CONFIG.name, "--size", CONFIG.size, "--image-id", str(CONFIG.image_id), "--watch"]
         for extra in (["--existing-id", str(self.config.existing_id)],
                       ["--existing-created-at", self.config.existing_created_at]):
-            with self.subTest(extra=extra), mock.patch.object(guard.os, "environ") as environment, \
+            with self.subTest(extra=extra), tempfile.TemporaryDirectory() as directory, \
+                    mock.patch.object(guard.os, "environ") as environment, \
                     mock.patch.object(guard, "HttpTransport") as transport, \
                     mock.patch("sys.stdout", new_callable=io.StringIO) as output:
-                self.assertEqual(guard.main(base + extra), 1)
-                self.assertEqual(json.loads(output.getvalue())["failure_reason"], "existing_id_and_created_at_must_be_paired")
+                path = Path(directory) / "receipt.json"
+                self.assertEqual(guard.main(base + extra + ["--receipt", str(path)]), 1)
+                self.assertEqual(json.loads(path.read_text())["failure_reason"], "existing_id_and_created_at_must_be_paired")
+                self.assertEqual(json.loads(output.getvalue())["status"], "failed")
+                self.assertNotIn("failure_reason", json.loads(output.getvalue()))
                 self.assertNotIn(mock.call(guard.TOKEN_ENV), environment.get.call_args_list)
                 transport.assert_not_called()
 
@@ -603,13 +608,17 @@ class ExistingDropletRecoveryTests(unittest.TestCase):
         for value in ("", "invalid", "2026-02-30T12:00:00Z", "2026-10-21T12:00:00+00:00",
                       "2026-10-21 12:00:00Z", "2026-10-21T12:00:00.1234567Z", "2026-10-21T12:00:00z",
                       " 2026-10-21T12:00:00Z", "２０２６-10-21T12:00:00Z"):
-            with self.subTest(value=value), mock.patch.object(guard.os, "environ") as environment, \
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory, \
+                    mock.patch.object(guard.os, "environ") as environment, \
                     mock.patch.object(guard, "HttpTransport") as transport, \
                     mock.patch("sys.stdout", new_callable=io.StringIO) as output:
                 argv = self.argv()
                 argv[argv.index("--existing-created-at") + 1] = value
-                self.assertEqual(guard.main(argv + ["--watch"]), 1)
-                self.assertEqual(json.loads(output.getvalue())["failure_reason"], "invalid_existing_created_at")
+                path = Path(directory) / "receipt.json"
+                self.assertEqual(guard.main(argv + ["--watch", "--receipt", str(path)]), 1)
+                self.assertEqual(json.loads(path.read_text())["failure_reason"], "invalid_existing_created_at")
+                self.assertEqual(json.loads(output.getvalue())["status"], "failed")
+                self.assertNotIn("failure_reason", json.loads(output.getvalue()))
                 self.assertNotIn(mock.call(guard.TOKEN_ENV), environment.get.call_args_list)
                 transport.assert_not_called()
 
@@ -621,6 +630,205 @@ class ExistingDropletRecoveryTests(unittest.TestCase):
             with self.subTest(name=value), self.assertRaisesRegex(guard.GuardError, "^invalid_existing_name$"):
                 guard.Config(value, CONFIG.size, CONFIG.image_id, self.config.existing_id,
                              self.config.existing_created_at).validate()
+
+
+class WatchdogPrivacyTests(unittest.TestCase):
+    def assert_private_env_reads(self, environment, expected):
+        reads = [call for call in environment.get.call_args_list
+                 if call.args and call.args[0] in (guard.CONFIG_ENV, guard.TOKEN_ENV)]
+        self.assertEqual(reads, [mock.call(name) for name in expected])
+
+    def private_config(self, recovering=False):
+        result = {"planned_name": CONFIG.name, "size_slug": CONFIG.size, "image_id": CONFIG.image_id}
+        if recovering:
+            result.update(existing_droplet_id=987654321, existing_created_at=guard.utc(BASE - 3600))
+        return result
+
+    def sensitive_receipt(self):
+        receipt = guard.initial_receipt(CONFIG, True)
+        receipt.update(status="bound", identity_verified=True, requests=7,
+                       bound={"id": 987654321, "created_at": guard.utc(BASE - 3600),
+                              "configuration_verified": True},
+                       delete_at_utc=guard.utc(BASE - 3600 + guard.DELETE_AGE),
+                       failure_reason="private-failure-sentinel", host="private-host.invalid",
+                       token="private-token-sentinel", extra={"url": "https://private-url.invalid/secret"})
+        return receipt
+
+    def assert_public_only(self, serialized):
+        allowed = {"status", "billing_cap_guaranteed", "provider_api_contacted", "armed",
+                   "pre_creation_armed", "identity_verified", "deletion_verified",
+                   "deletion_before_deadline", "manual_deletion_required", "requests",
+                   "delete_attempts", "transient_errors"}
+        for line in serialized.splitlines():
+            result = json.loads(line)
+            self.assertLessEqual(set(result), allowed)
+            self.assertIn(result["status"], guard.PUBLIC_STATUSES | {"unknown"})
+            self.assertFalse(result["billing_cap_guaranteed"])
+            for key, value in result.items():
+                if key != "status":
+                    self.assertIn(type(value), (bool, int))
+        for forbidden in (CONFIG.name, CONFIG.size, str(CONFIG.image_id), "987654321",
+                          guard.utc(BASE - 3600), "private-", "failure_reason", "created_at"):
+            self.assertNotIn(forbidden, serialized)
+
+    def test_stdout_omits_private_fields_and_receipts_stay_private_across_updates(self):
+        receipt = self.sensitive_receipt()
+        with tempfile.TemporaryDirectory() as directory, mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+            path = Path(directory) / "receipt.json"
+            sink = guard.ReceiptSink(path)
+            for status in ("bound", "failed"):
+                receipt["status"] = status
+                sink(receipt)
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(json.loads(path.read_text()), receipt)
+            self.assert_public_only(output.getvalue())
+            self.assertTrue(json.loads(output.getvalue().splitlines()[0])["identity_verified"])
+
+    def test_public_projection_rejects_hostile_values_under_allowed_keys(self):
+        receipt = self.sensitive_receipt()
+        receipt.update(status={"private-status-sentinel": True}, identity_verified="private-identity-sentinel",
+                       armed=["private-armed-sentinel"], requests="private-counter-sentinel",
+                       delete_attempts=True, transient_errors=-1, billing_cap_guaranteed=True)
+        projected = guard.public_receipt(receipt)
+        self.assertEqual(projected["status"], "unknown")
+        self.assertFalse(projected["identity_verified"])
+        self.assertFalse(projected["armed"])
+        self.assertNotIn("requests", projected)
+        self.assertNotIn("delete_attempts", projected)
+        self.assertNotIn("transient_errors", projected)
+        self.assert_public_only(json.dumps(projected))
+        self.assert_public_only(json.dumps(guard.public_receipt(["private-unexpected-report"])))
+
+    def test_environment_preflight_accepts_fresh_and_recovery_without_token_access(self):
+        for recovering in (False, True):
+            with self.subTest(recovering=recovering), tempfile.TemporaryDirectory() as directory, \
+                    mock.patch.object(guard.os, "environ") as environment, \
+                    mock.patch.object(guard, "HttpTransport") as transport, \
+                    mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+                document = self.private_config(recovering)
+                environment.get.side_effect = lambda name: json.dumps(document) if name == guard.CONFIG_ENV else None
+                path = Path(directory) / "receipt.json"
+                self.assertEqual(guard.main(["--config-from-env", "--receipt", str(path)]), 0)
+                receipt = json.loads(path.read_text())
+                self.assertEqual(receipt["expected"]["name"], CONFIG.name)
+                if recovering:
+                    self.assertEqual(receipt["expected"]["id"], document["existing_droplet_id"])
+                    self.assertEqual(receipt["expected"]["created_at"], document["existing_created_at"])
+                self.assertFalse(receipt["identity_verified"])
+                self.assert_private_env_reads(environment, [guard.CONFIG_ENV])
+                transport.assert_not_called()
+                self.assert_public_only(output.getvalue())
+
+    def test_invalid_private_configuration_fails_before_token_access_or_api(self):
+        valid = self.private_config()
+        recovery = self.private_config(True)
+        documents = [None, "", "private-invalid-json", "[]", "null", "{\"private\": NaN}",
+                     "{\"planned_name\": \"private-duplicate\", \"planned_name\": \"private-second\"}",
+                     " " * (guard.MAX_CONFIG_BYTES + 1), "[" * 1500 + "]" * 1500,
+                     "\ud800", json.dumps(dict(valid, private_extra="private-extra-sentinel")),
+                     json.dumps({key: value for key, value in valid.items() if key != "image_id"}),
+                     json.dumps(dict(valid, existing_droplet_id=987654321)),
+                     json.dumps(dict(valid, existing_created_at=recovery["existing_created_at"])),
+                     json.dumps(dict(recovery, existing_droplet_id=None, existing_created_at=None))]
+        for field, bad in (("planned_name", []), ("size_slug", None), ("image_id", True),
+                           ("image_id", 1.5), ("image_id", "12345"), ("image_id", -1)):
+            documents.append(json.dumps(dict(valid, **{field: bad})))
+        for field, bad in (("existing_droplet_id", True), ("existing_droplet_id", 1.5),
+                           ("existing_droplet_id", "987654321"), ("existing_droplet_id", 2**63),
+                           ("existing_droplet_id", 0), ("existing_created_at", "private-invalid-time"),
+                           ("existing_created_at", "2026-10-21T12:00:00+00:00"),
+                           ("existing_created_at", None)):
+            documents.append(json.dumps(dict(recovery, **{field: bad})))
+        for index, document in enumerate(documents):
+            with self.subTest(case=index), tempfile.TemporaryDirectory() as directory, \
+                    mock.patch.object(guard.os, "environ") as environment, \
+                    mock.patch.object(guard, "HttpTransport") as transport, \
+                    mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+                environment.get.side_effect = lambda name: document if name == guard.CONFIG_ENV else None
+                path = Path(directory) / "receipt.json"
+                self.assertEqual(guard.main(["--config-from-env", "--watch", "--receipt", str(path)]), 1)
+                self.assert_private_env_reads(environment, [guard.CONFIG_ENV])
+                transport.assert_not_called()
+                self.assertEqual(json.loads(path.read_text())["status"], "failed")
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                self.assert_public_only(output.getvalue())
+
+    def test_mixed_sources_and_argument_errors_never_echo_private_values(self):
+        cases = [["--config-from-env", "--name", "private-mixed-sentinel"],
+                 ["--image-id", "private-invalid-integer"],
+                 ["--existing-id", "private-invalid-id"], ["--private-unknown-argument"]]
+        for argv in cases:
+            with self.subTest(argv=argv), mock.patch.object(guard.os, "environ") as environment, \
+                    mock.patch.object(guard, "HttpTransport") as transport, \
+                    mock.patch("sys.stderr", new_callable=io.StringIO) as error:
+                with self.assertRaises(SystemExit) as failure:
+                    guard.main(argv + ["--watch"])
+                self.assertEqual(failure.exception.code, 2)
+                self.assertNotIn("private-", error.getvalue())
+                self.assert_private_env_reads(environment, [])
+                transport.assert_not_called()
+
+    def test_secret_recovery_preserves_exact_identity_and_original_deadlines(self):
+        clock = FakeClock()
+        provider = SyntheticProvider(clock)
+        document = self.private_config(True)
+        provider.preexisting = True
+        provider.droplet["created_at"] = document["existing_created_at"]
+        environment = {guard.CONFIG_ENV: json.dumps(document), guard.TOKEN_ENV: "synthetic-token-only"}
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(guard.os.environ, environment), \
+                mock.patch.object(guard, "HttpTransport", return_value=provider), \
+                mock.patch.object(guard, "Clock", return_value=clock), \
+                mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+            path = Path(directory) / "receipt.json"
+            self.assertEqual(guard.main(["--config-from-env", "--watch", "--receipt", str(path)]), 0)
+            receipt = json.loads(path.read_text())
+            self.assertEqual(receipt["bound"]["id"], document["existing_droplet_id"])
+            self.assertEqual(receipt["bound"]["created_at"], document["existing_created_at"])
+            self.assertEqual(receipt["delete_at_utc"], guard.utc(BASE - 3600 + guard.DELETE_AGE))
+            self.assertEqual(receipt["verify_before_utc"], guard.utc(BASE - 3600 + guard.VERIFY_AGE))
+            self.assertTrue(receipt["identity_verified"])
+            self.assertFalse(receipt["pre_creation_armed"])
+            self.assertTrue(all(path == "/v2/droplets/987654321" for _, path, _ in provider.calls))
+            self.assert_public_only(output.getvalue())
+
+    def test_receipt_io_failure_emits_only_public_evidence(self):
+        argv = ["--name", CONFIG.name, "--size", CONFIG.size, "--image-id", str(CONFIG.image_id), "--watch"]
+        with mock.patch.object(guard.ReceiptSink, "__call__", side_effect=OSError("private-path-sentinel")), \
+                mock.patch.object(guard.os, "environ") as environment, \
+                mock.patch.object(guard, "HttpTransport") as transport, \
+                mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(guard.main(argv), 1)
+            self.assert_public_only(output.getvalue())
+            self.assert_private_env_reads(environment, [])
+            transport.assert_not_called()
+
+    def test_actual_workflow_summary_filters_private_fields_and_dispatch_has_no_inputs(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/droplet-watchdog.yml").read_text()
+        self.assertNotIn("inputs.", workflow)
+        self.assertIn("workflow_dispatch: {}", workflow)
+        before_supervision, supervision = workflow.split("      - name: Supervise the Droplet using the selected binding mode", 1)
+        self.assertNotIn("secrets.", before_supervision)
+        self.assertIn("${{ secrets.SQUADPAD_DO_WATCHDOG_CONFIG }}", supervision)
+        self.assertIn("if: success() && vars.SQUADPAD_DO_WATCHDOG_ENABLED == 'true'", supervision)
+        summary = workflow.split("      - name: Summarize observed cleanup without a billing-cap claim", 1)[1]
+        source = textwrap.dedent(summary.split("python3 -B - <<'PY'\n", 1)[1].rsplit("\n          PY", 1)[0])
+        for invalid_values in (False, True):
+            with self.subTest(invalid_values=invalid_values), tempfile.TemporaryDirectory() as directory:
+                receipt = self.sensitive_receipt()
+                if invalid_values:
+                    receipt.update(status="private-hostile-status", requests="private-hostile-counter",
+                                   identity_verified={"private-hostile-boolean": True})
+                path, result = Path(directory) / "receipt.json", Path(directory) / "summary.md"
+                path.write_text(json.dumps(receipt))
+                with mock.patch.dict(guard.os.environ, {"SQUADPAD_WATCHDOG_RECEIPT": str(path),
+                                                       "GITHUB_STEP_SUMMARY": str(result)}), \
+                        mock.patch.object(sys, "path", list(sys.path)):
+                    exec(compile(source, "workflow-summary", "exec"), {"__name__": "__main__"})
+                rendered = result.read_text()
+                clean = rendered.split("```json\n", 1)[1].split("\n```", 1)[0]
+                self.assert_public_only(json.dumps(json.loads(clean)))
+                self.assertNotIn("private-", rendered)
+                self.assertNotIn("987654321", rendered)
 
 
 if __name__ == "__main__":

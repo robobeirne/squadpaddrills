@@ -28,6 +28,14 @@ independent deletion. Successful metadata access does not establish that the
 full transfer or build session can complete. The user's Mac remains outside
 this execution path.
 
+If the cloud workspace cannot complete an SSH connection, use the manual
+[worker access inspection](WORKER_ACCESS.md) from a GitHub-hosted runner first.
+That bounded, read-only check verifies authentication and reports selected
+guest resources. It does not install packages, create the build account,
+transfer Unreal, establish provider cleanup or run the native test. The separate
+native workflow below still requires a fully prepared worker and private
+evidence collection.
+
 Epic [recommends 32 GB RAM for Linux development](https://dev.epicgames.com/documentation/en-us/unreal-engine/linux-development-requirements-for-unreal-engine).
 This smaller first attempt is limited to one project module with seven authored
 `.cpp` files against an installed engine, followed by one NullRHI reader test.

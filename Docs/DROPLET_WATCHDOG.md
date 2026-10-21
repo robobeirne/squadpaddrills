@@ -2,10 +2,11 @@
 
 Status on 21 October 2026: the driver, manual workflow and controlled tests
 are implemented. The expected first-attempt profile is regular Basic
-4 vCPU / 8 GiB RAM / 160 GiB disk, to fit published Tier 2 limits. All 38
-controlled watchdog tests passed locally, including the original 21 tests and
-17 tests for explicit recovery of an already-created resource. No provider API
-supervision or deletion has been verified by this source change. The approved
+4 vCPU / 8 GiB RAM / 160 GiB disk, to fit published Tier 2 limits. All 46
+controlled watchdog tests passed locally, including the original 21 tests,
+17 tests for explicit recovery and eight public-output/private-configuration
+tests. No provider API supervision or deletion has been verified by this source
+change. The approved
 budget is US$5 including tax for one attempt; see
 [the compute plan](REMOTE_BUILD_COSTS.md).
 
@@ -38,7 +39,8 @@ intervention. An account owner must retain a working provider-console fallback.
 Review the workflow on the repository's default branch before dispatch. GitHub
 [requires the workflow to exist on that branch](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
 The committed workflow permits only `robobeirne/squadpaddrills` on `main` and uses
-read-only repository permissions, pinned actions and no artifact uploads.
+read-only repository permissions, pinned actions and no artifact uploads or
+resource-specific dispatch inputs.
 Adding it to a draft PR does not make it dispatchable.
 
 Store a DigitalOcean token with only `droplet:read` and `droplet:delete` as the
@@ -49,6 +51,13 @@ The driver does not need resource-creation permission. It cannot prove that a
 token has no additional permissions; the account owner must set its scopes.
 The token belongs in the secret store, never in chat, source, workflow inputs,
 the guest, a public issue or an uploaded artifact.
+
+Store the expected resource configuration as a separate repository Actions
+secret named `SQUADPAD_DO_WATCHDOG_CONFIG`. The workflow reads both secrets only
+in its supervision step after the readiness gate succeeds. Resource names,
+IDs and timestamps must not enter dispatch inputs, repository variables, source
+or public logs. Invalid configuration is rejected before token access or any
+provider request. Neither secret has been configured by this source change.
 
 For a new resource, after account access, fallback deletion, billing/tax, engine
 access and the exact live plan/image have been checked, set repository variable
@@ -63,15 +72,36 @@ immediately. Recovery does not need SSH access or an engine transfer. Those
 remain separate prerequisites for native execution and must not delay cleanup
 protection for a resource which already exists.
 
-Required dispatch inputs are:
+The configuration secret is one JSON object with exactly these fields. Numbers
+must be JSON integers, not quoted strings, floats or booleans. Unknown and
+duplicate keys, non-finite values, malformed JSON and documents over 8 KiB are
+rejected. Omit both recovery fields for fresh mode. Include both with non-null
+values for existing-resource recovery.
 
-| Input | Required value |
+| Private JSON field | Required value |
 | --- | --- |
 | `planned_name` | Exact expected name. Fresh mode requires a new `squadpad-native-` name with an 8–40 character lowercase alphanumeric/hyphen suffix. |
 | `size_slug` | The live-verified catalogue slug for the planned regular Basic 4 vCPU / 8 GiB / 160 GiB plan |
 | `image_id` | The live-verified numeric Ubuntu 22.04 x86-64 image ID |
-| `existing_droplet_id` | Optional exact positive decimal provider ID, paired with `existing_created_at`. Leave both empty for fresh mode. |
+| `existing_droplet_id` | Optional exact positive integer provider ID, paired with `existing_created_at`. Omit both for fresh mode. |
 | `existing_created_at` | Optional exact provider UTC `created_at`, paired with `existing_droplet_id`. Use the provider's value unchanged, including any fractional seconds. |
+
+A synthetic fresh-mode example, not a usable provider configuration:
+
+```json
+{
+  "planned_name": "squadpad-native-synthetic-0001",
+  "size_slug": "synthetic-catalogue-slug",
+  "image_id": 12345
+}
+```
+
+Record the verified live values and calculated deadlines privately before
+dispatch. Dispatch one intended run without resource inputs. The job reads the
+configuration secret when it starts, so do not replace that secret while a run
+is queued or active. `identity_verified: true` means the controller compared the
+provider response successfully against that run's private configuration. It does
+not establish independent operator verification or guarantee future cleanup.
 
 The exact slug and image ID are intentionally not guessed. The driver additionally
 checks `lon1`, 4 vCPU, memory `8192`, disk `160`, no backup feature, and a positive
@@ -102,15 +132,17 @@ the [native execution prerequisites](NATIVE_EXECUTION.md) before the build.
 This sequence applies to fresh-resource mode. Use the recovery procedure below
 for a resource which already exists.
 
-1. Dispatch the watchdog on the reviewed `main` commit with the three inputs.
+1. Save the verified fresh-resource configuration in the secret, then dispatch
+   the watchdog on the reviewed `main` commit without resource inputs.
    Inspect the live log. It must show a successful initial query with no existing
-   name match, `status: "armed"`, and a current `armed_at_utc`. Confirm the job
+   name match, `status: "armed"`, and `pre_creation_armed: true`. Confirm the job
    remains running. Do not create a resource based on a preflight, queued run,
    stale receipt or readiness variable alone.
 2. Create exactly one approved VM with that exact name within the 15-minute
-   window. Immediately verify the watchdog's `bound` receipt matches the new
-   provider ID and creation time. Wrong configuration or ambiguous discovery
-   fails without adopting a resource; delete the newly created machine through
+   window. Immediately verify `status: "bound"` and `identity_verified: true`
+   for this run. The controller checks the expected configuration and records
+   the exact bound ID and creation time privately. Wrong configuration or
+   ambiguous discovery fails without adopting a resource; delete the newly created machine through
    the provider immediately if binding fails.
 3. Run the [native build procedure](NATIVE_EXECUTION.md), stopping the workload
    at four hours from provider creation. Collect the allowlisted evidence
@@ -133,8 +165,9 @@ not a new lifetime allowance or a claim of earlier protection.
 ## Recover supervision of one existing resource
 
 Use recovery only for the explicitly authorized resource after verifying its
-identity through the provider account. Supply the normal expected name, size
-slug and image ID, plus both `existing_droplet_id` and `existing_created_at`.
+identity through the provider account. Store the normal expected name, size
+slug and image ID, plus both `existing_droplet_id` and `existing_created_at`,
+in the private configuration secret.
 The CLI equivalents are `--existing-id` and `--existing-created-at`. Supplying
 only one is rejected. IDs must be positive decimal integers without signs,
 padding, whitespace or exponent notation. Creation time must be a valid UTC
@@ -175,9 +208,11 @@ not request deletion of a resource already verified absent.
 Recovery receipts record `binding_mode: "existing_exact_id"`, the actual
 `recovery_started_at_utc`, and `pre_creation_armed: false`. The legacy `armed`
 field remains false, and no `armed_at_utc` is fabricated. Inspect the live
-`bound` receipt and its original `delete_at_utc` and `verify_before_utc`, or the
-terminal verified-deletion receipt if cleanup was already due. A `recovering`
-status alone does not establish binding or protection.
+`bound` status with `identity_verified: true` for the intended run, or the
+terminal verified-deletion result if cleanup was already due. Compare the
+private expected configuration and original deadlines before dispatch. Exact
+`delete_at_utc` and `verify_before_utc` values stay in the private receipt. A
+`recovering` status alone does not establish binding or protection.
 
 If identity, configuration, credentials or the remaining lifetime prevent
 recovery, use the account owner's provider-console fallback immediately.
@@ -215,13 +250,33 @@ Preflight checks syntax and produces a receipt without reading the token or
 contacting the provider. It does not verify identity, resource age, configuration
 or live supervision. Only `--watch` performs those live checks.
 
+The existing CLI flags remain supported for a private external controller.
+The GitHub workflow instead passes only `--config-from-env --receipt ... --watch`.
+`--config-from-env` reads `SQUADPAD_DO_WATCHDOG_CONFIG` and must not be mixed with
+any resource-specific CLI flag. Without `--watch`, this mode validates the private
+configuration without reading the provider token or contacting the API.
+
 ## Evidence and limits
 
-The sanitized receipt records the driver hash, expected configuration, exact
-bound ID/time, delete/verification deadlines, request counts and outcome. The
-workflow publishes that receipt in its log and summary; it excludes IP addresses,
-account details, credentials and raw provider responses. No engine or native
-build evidence is copied into the cleanup job.
+The full receipt records the driver hash, expected configuration, exact bound
+ID/time, delete/verification deadlines, request counts and outcome in a private
+file. New and replacement receipt files use mode 0600. Failure reasons stay in
+this private receipt. Invalid argument errors are fixed messages which never
+echo supplied values.
+
+Driver stdout and the GitHub summary share one strict public projection. It
+contains only an enumerated status, boolean evidence, nonnegative integer
+request/retry counters and `identity_verified`. It excludes names, IDs, exact
+timestamps, arbitrary failure text, paths, nested provider fields and unexpected
+extra fields, including when such values appear under allowlisted keys with
+invalid types. A successful binding keeps the original identity checks and
+deadlines unchanged.
+
+The workflow does not upload receipt artifacts. Full receipts remain only in
+temporary private runner files and disappear with the runner unless an explicitly
+private collection route has been arranged. Keep the expected configuration,
+original deadlines and operational records privately outside public Actions
+logs. No engine or native build evidence is copied into the cleanup job.
 
 Some response fields need permissions beyond `droplet:read`. Missing backup,
 snapshot or volume ID fields are reported as unavailable, not as proof that
