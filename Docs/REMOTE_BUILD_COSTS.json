@@ -320,7 +320,12 @@
     "creation_window_seconds": 900,
     "required_scopes": [
       "droplet:read",
-      "droplet:delete"
+      "droplet:delete",
+      "regions:read",
+      "sizes:read",
+      "actions:read",
+      "image:read",
+      "snapshot:read"
     ],
     "secret_name": "SQUADPAD_DO_CLEANUP_TOKEN",
     "readiness_variable": "SQUADPAD_DO_WATCHDOG_ENABLED",
