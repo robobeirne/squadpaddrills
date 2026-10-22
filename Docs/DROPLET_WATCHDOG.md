@@ -43,12 +43,33 @@ read-only repository permissions, pinned actions and no artifact uploads or
 resource-specific dispatch inputs.
 Adding it to a draft PR does not make it dispatchable.
 
-Store a DigitalOcean token with only `droplet:read` and `droplet:delete` as the
-repository Actions secret `SQUADPAD_DO_CLEANUP_TOKEN`. These scopes cover filtered
-listing, exact-ID lookup and deletion in the
-[official Droplet API](https://docs.digitalocean.com/products/droplets/reference/api/droplets/).
-The driver does not need resource-creation permission. It cannot prove that a
-token has no additional permissions; the account owner must set its scopes.
+Store a DigitalOcean token using **Custom Scopes** as the repository Actions
+secret `SQUADPAD_DO_CLEANUP_TOKEN`. Its required effective permissions are:
+
+```text
+droplet:delete
+droplet:read
+regions:read
+sizes:read
+actions:read
+image:read
+snapshot:read
+```
+
+DigitalOcean's [required dependencies for `droplet:delete`](https://docs.digitalocean.com/reference/api/scopes/droplet/delete/)
+include `droplet:read` and all five other read scopes above; its
+[`droplet:read` dependencies](https://docs.digitalocean.com/reference/api/scopes/droplet/read/)
+also list those five scopes. These requirements were checked on 22 October 2026.
+Retain the required dependencies if the token form adds them automatically.
+Do not select Droplet create, update, admin or full API access for this cleanup
+token. The driver only lists Droplets, looks up an exact ID and deletes that ID.
+
+The token grants resource-type access in the team, including deletion of
+Droplets; DigitalOcean does not restrict it to this one planned worker. The
+reviewed driver's name, configuration and exact-ID checks restrict which
+resource this implementation can delete. Those checks do not narrow the token's
+provider permissions. The driver cannot prove that a token has no additional
+permissions; the account owner must set its scopes.
 The token belongs in the secret store, never in chat, source, workflow inputs,
 the guest, a public issue or an uploaded artifact.
 
@@ -278,10 +299,10 @@ private collection route has been arranged. Keep the expected configuration,
 original deadlines and operational records privately outside public Actions
 logs. No engine or native build evidence is copied into the cleanup job.
 
-Some response fields need permissions beyond `droplet:read`. Missing backup,
-snapshot or volume ID fields are reported as unavailable, not as proof that
-those resources do not exist. The provisioner and account owner must verify
-the no-extras requirement independently.
+The required read dependencies do not grant optional associated access such as
+`block_storage:read`. Missing backup, snapshot or volume ID fields are reported
+as unavailable, not as proof that those resources do not exist. The provisioner
+and account owner must verify the no-extras requirement independently.
 
 `billing_cap_guaranteed` is always `false`, including after confirmed deletion.
 The focused tests establish controlled timing, identity and response-handling

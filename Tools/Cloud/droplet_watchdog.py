@@ -10,13 +10,17 @@ pre-creation arming, and never discovers an existing resource by name.
 
 The first attempt uses regular Basic 4 vCPU / 8 GiB RAM / 160 GiB disk in LON1.
 The operator must supply a live-verified size slug and Ubuntu 22.04 image ID.
-Keep a token with droplet:read and droplet:delete only in SQUADPAD_DO_TOKEN.
-Scopes are an operator prerequisite, not something this program can prove.
+Keep a custom-scoped token in SQUADPAD_DO_TOKEN with droplet:delete,
+droplet:read and the required dependencies regions:read, sizes:read,
+actions:read, image:read and snapshot:read. No create/update/admin scope is
+needed. The token grants resource-type access in the team; only this driver's
+identity checks restrict deletion to the intended exact ID. Scopes are an
+operator prerequisite, not something this program can prove.
 API: https://docs.digitalocean.com/products/droplets/reference/api/droplets/
 
 Verified disappearance is an operational result, NOT a guaranteed billing cap.
 Controller cancellation, network/provider failure and account-level extras need
-operator intervention. Image/volume visibility can require additional scopes;
+operator intervention. Volume visibility can require additional scopes;
 missing fields are recorded as unavailable, never asserted to be empty.
 """
 from __future__ import annotations
@@ -247,7 +251,9 @@ def initial_receipt(config, watch):
     return {"schema": "squadpad.droplet-watchdog.v1", "mode": "watch" if watch else "preflight",
             "status": "starting" if watch else "preflight_only", "expected": config.expected(),
             "binding_mode": "existing_exact_id" if config.recovering else "fresh_after_arm",
-            "token_env": TOKEN_ENV, "required_token_scopes": ["droplet:read", "droplet:delete"],
+            "token_env": TOKEN_ENV, "required_token_scopes": [
+                "droplet:read", "droplet:delete", "regions:read", "sizes:read",
+                "actions:read", "image:read", "snapshot:read"],
             "watchdog_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "creation_window_seconds": 0 if config.recovering else CREATE_WINDOW,
             "delete_age_seconds": DELETE_AGE,
