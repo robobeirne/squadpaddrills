@@ -1,0 +1,65 @@
+name: Read-only DigitalOcean setup check
+
+# Publishing reviewed changes to main queues the catalogue check. Manual reruns
+# remain available. Pull requests only run synthetic tests, without secrets.
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - '.github/workflows/provider-preflight.yml'
+      - 'Tools/Cloud/provider_preflight.py'
+      - 'Tests/test_provider_preflight.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/provider-preflight.yml'
+      - 'Tools/Cloud/provider_preflight.py'
+      - 'Tests/test_provider_preflight.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provider-preflight-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  synthetic-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+      - name: Verify read-only transport and public report boundaries
+        run: python3 -B -m unittest Tests.test_provider_preflight -v
+
+  catalogue-check:
+    needs: synthetic-tests
+    if: github.repository == 'robobeirne/squadpaddrills' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+      - name: Confirm SSH credential is saved without reading its value
+        env:
+          SSH_KEY_PRESENT: ${{ secrets.SQUADPAD_REMOTE_SSH_KEY != '' }}
+        run: |
+          if [ "$SSH_KEY_PRESENT" != 'true' ]; then
+            echo 'Required SSH credential is missing. No cloud API was contacted.'
+            exit 1
+          fi
+          echo 'Required SSH credential is present. SSH access has not been tested.'
+      - name: Read catalogue using the saved provider credential
+        env:
+          SQUADPAD_DO_TOKEN: ${{ secrets.SQUADPAD_DO_CLEANUP_TOKEN }}
+        run: python3 -B Tools/Cloud/provider_preflight.py
